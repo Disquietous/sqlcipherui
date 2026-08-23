@@ -1,0 +1,65 @@
+name: Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Find successful build run
+        id: find-run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" \
+            --workflow=release.yml --status=success --limit=1 \
+            --json databaseId -q '.[0].databaseId')
+          if [ -z "$RUN_ID" ]; then
+            echo "ERROR: No successful build found. Run the build workflow first."
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "Using build run: $RUN_ID"
+
+      - name: Download artifacts
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p artifacts
+          gh run download "${{ steps.find-run.outputs.run_id }}" \
+            --repo "$GITHUB_REPOSITORY" --dir artifacts
+
+      - name: Collect installer files
+        id: collect
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.exe" \) \
+            -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+          COUNT=$(find release-assets -type f | wc -l | tr -d ' ')
+          if [ "$COUNT" -eq 0 ]; then
+            echo "ERROR: No installer files found in build artifacts."
+            exit 1
+          fi
+          echo "Found $COUNT installer(s)"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" &>/dev/null; then
+            echo "ERROR: Release $TAG already exists."
+            exit 1
+          fi
+          gh release create "$TAG" release-assets/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "SQLCipherUI ${TAG}" \
+            --generate-notes

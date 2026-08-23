@@ -1,0 +1,76 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SQLite SQLCipher ETL favicon</title>
+  <desc id="desc">A rounded navy app icon with a blue database cylinder, a silver security shield with keyhole, and teal ETL data-flow arrow.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07152d"/>
+      <stop offset="1" stop-color="#031025"/>
+    </linearGradient>
+    <linearGradient id="dbTop" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#69c7ff"/>
+      <stop offset="1" stop-color="#2479e8"/>
+    </linearGradient>
+    <linearGradient id="dbSide" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2687f0"/>
+      <stop offset="1" stop-color="#0b3d8d"/>
+    </linearGradient>
+    <linearGradient id="flow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2692ff"/>
+      <stop offset="1" stop-color="#45f1c8"/>
+    </linearGradient>
+    <linearGradient id="shieldOuter" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7fbff"/>
+      <stop offset="0.45" stop-color="#aeb9c6"/>
+      <stop offset="1" stop-color="#6f7c8c"/>
+    </linearGradient>
+    <linearGradient id="shieldInner" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c8d2df"/>
+      <stop offset="1" stop-color="#465263"/>
+    </linearGradient>
+    <filter id="softShadow" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="14" stdDeviation="16" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="url(#bg)"/>
+
+  <!-- Database stack -->
+  <g filter="url(#softShadow)">
+    <path d="M108 155c0-41 59-74 132-74s132 33 132 74v170c0 41-59 74-132 74s-132-33-132-74z" fill="url(#dbSide)"/>
+    <path d="M108 155c0 41 59 74 132 74s132-33 132-74-59-74-132-74-132 33-132 74z" fill="url(#dbTop)"/>
+    <path d="M108 232c0 41 59 74 132 74s132-33 132-74" fill="none" stroke="#75c9ff" stroke-width="10" stroke-opacity="0.55"/>
+    <path d="M108 307c0 41 59 74 132 74s132-33 132-74" fill="none" stroke="#75c9ff" stroke-width="10" stroke-opacity="0.45"/>
+    <ellipse cx="240" cy="155" rx="132" ry="74" fill="none" stroke="#9cdbff" stroke-width="7" stroke-opacity="0.7"/>
+  </g>
+
+  <!-- ETL/integration blocks -->
+  <g filter="url(#glow)">
+    <rect x="68" y="282" width="31" height="31" rx="7" fill="#46c8ff"/>
+    <rect x="112" y="282" width="31" height="31" rx="7" fill="#318eff"/>
+    <rect x="68" y="334" width="31" height="31" rx="7" fill="#2a9cff"/>
+    <rect x="112" y="334" width="31" height="31" rx="7" fill="#1f7ee6"/>
+    <rect x="68" y="386" width="31" height="31" rx="7" fill="#227de5"/>
+    <rect x="112" y="386" width="31" height="31" rx="7" fill="#1557c9"/>
+  </g>
+
+  <!-- Merge/transform flow arrow -->
+  <path d="M166 309 C210 309 213 354 258 354 L282 354" fill="none" stroke="url(#flow)" stroke-width="21" stroke-linecap="round"/>
+  <path d="M166 407 C212 407 211 354 258 354 L282 354" fill="none" stroke="url(#flow)" stroke-width="21" stroke-linecap="round"/>
+  <path d="M275 317 L331 354 L275 391 Z" fill="url(#flow)"/>
+
+  <!-- Security shield -->
+  <g filter="url(#softShadow)">
+    <path d="M358 179c34 26 67 35 96 39v112c0 72-39 118-96 151-57-33-96-79-96-151V218c29-4 62-13 96-39z" fill="url(#shieldOuter)"/>
+    <path d="M358 209c25 18 49 26 72 31v88c0 51-27 84-72 112-45-28-72-61-72-112v-88c23-5 47-13 72-31z" fill="url(#shieldInner)"/>
+    <path d="M358 209v231c45-28 72-61 72-112v-88c-23-5-47-13-72-31z" fill="#202b3a" opacity="0.23"/>
+    <path d="M358 269a28 28 0 0 0-15 52l-10 55a10 10 0 0 0 10 12h30a10 10 0 0 0 10-12l-10-55a28 28 0 0 0-15-52z" fill="#06142b"/>
+    <path d="M358 180c34 26 67 35 96 39v112c0 72-39 118-96 151-57-33-96-79-96-151V219c29-4 62-13 96-39z" fill="none" stroke="#ffffff" stroke-width="5" stroke-opacity="0.55"/>
+  </g>
+</svg>

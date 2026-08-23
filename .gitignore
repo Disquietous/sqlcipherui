@@ -1,0 +1,82 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+specs/
+dist/
+build/
+eggs/
+*.whl
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+CLAUDE.md
+.claude/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python tools
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Node / React
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# Build output
+build/
+dist/
+*.js.map
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite3
+
+# Runtime
+.run/
+logs/
+
+# Tauri
+src-tauri/target/
+src-tauri/binaries/
+
+# Packaging
+packaging/build/
+packaging/dist/
+packaging/.tiktoken_cache/
+releases/

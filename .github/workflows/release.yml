@@ -1,0 +1,245 @@
+name: Release Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version override (leave blank to read from tauri.conf.json)"
+        required: false
+        type: string
+
+jobs:
+  build-macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: brew install sqlcipher
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: rust-macos-${{ hashFiles('src-tauri/Cargo.lock', 'src-tauri/tauri.conf.json') }}
+          restore-keys: rust-macos-
+
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: venv
+          key: python-macos-${{ hashFiles('packages/core/pyproject.toml', 'packages/api/pyproject.toml') }}
+          restore-keys: python-macos-
+
+      - name: Install Python dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -e "packages/core" -e "packages/api" "pyinstaller>=6.12.0" Pillow
+
+      - name: Install frontend dependencies
+        run: npm --prefix packages/web ci
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Import code signing certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERT_FILE="/tmp/ci-cert-$$.p12"
+          KEYCHAIN_FILE="/tmp/ci-keychain-$$.keychain-db"
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+
+          echo "$APPLE_CERTIFICATE" | base64 --decode > "$CERT_FILE"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_FILE"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security import "$CERT_FILE" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_FILE"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_FILE"
+          security list-keychains -d user -s "$KEYCHAIN_FILE" login.keychain-db
+
+          rm "$CERT_FILE"
+
+      - name: Build
+        env:
+          CI: "true"
+        run: |
+          source venv/bin/activate
+          bash packaging/scripts/build_macos.sh
+
+      - name: Sign app bundle
+        run: |
+          IDENTITY="Developer ID Application: James Myers (P9P8PPRUHR)"
+          ENTITLEMENTS="packaging/entitlements.plist"
+
+          echo "=== Verifying signing identity ==="
+          security find-identity -v -p codesigning | grep "$IDENTITY" || {
+            echo "ERROR: Signing identity not found in keychain"
+            security find-identity -v -p codesigning
+            exit 1
+          }
+
+          APP_PATH=$(find src-tauri/target/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app bundle found"
+            exit 1
+          fi
+
+          echo "=== Finding and signing all Mach-O binaries ==="
+          COUNT=0
+          find "$APP_PATH" -type f -print0 | while IFS= read -r -d '' f; do
+            if file "$f" | grep -q "Mach-O"; then
+              codesign --force --timestamp --options runtime \
+                --entitlements "$ENTITLEMENTS" \
+                --sign "$IDENTITY" "$f" 2>&1 || echo "WARNING: Failed to sign $f"
+              COUNT=$((COUNT + 1))
+            fi
+          done || true
+          echo "Signed nested binaries"
+
+          echo "=== Signing app bundle ==="
+          codesign --force --timestamp --options runtime \
+            --entitlements "$ENTITLEMENTS" \
+            --sign "$IDENTITY" "$APP_PATH"
+
+          echo "=== Verifying signature ==="
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH" 2>&1
+          echo "Signed: $APP_PATH"
+
+      - name: Rebuild DMG with signed app
+        run: |
+          DMG_FILE=$(find releases -name "*.dmg" | head -1)
+          if [ -n "$DMG_FILE" ]; then
+            rm "$DMG_FILE"
+          fi
+          APP_PATH=$(find src-tauri/target/release/bundle/macos -name "*.app" -maxdepth 1 | head -1)
+          APP_NAME=$(basename "$APP_PATH" .app)
+          DMG_NAME="${APP_NAME}_$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*: *"\(.*\)".*/\1/')_aarch64.dmg"
+
+          STAGING=$(mktemp -d)
+          cp -R "$APP_PATH" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create -volname "$APP_NAME" -srcfolder "$STAGING" -ov -format UDZO "releases/$DMG_NAME"
+          rm -rf "$STAGING"
+          echo "Created: releases/$DMG_NAME"
+
+      - name: Notarize DMG
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_FILE=$(find releases -name "*.dmg" | head -1)
+          SUBMIT_OUT=$(xcrun notarytool submit "$DMG_FILE" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait 2>&1)
+          echo "$SUBMIT_OUT"
+
+          SUBMISSION_ID=$(echo "$SUBMIT_OUT" | grep "id:" | head -1 | awk '{print $2}')
+          STATUS=$(echo "$SUBMIT_OUT" | grep "status:" | tail -1 | awk '{print $2}')
+
+          if [ "$STATUS" != "Accepted" ]; then
+            echo "Notarization failed with status: $STATUS"
+            echo "--- Notarization Log ---"
+            xcrun notarytool log "$SUBMISSION_ID" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_ID_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" || true
+            exit 1
+          fi
+
+          xcrun stapler staple "$DMG_FILE"
+          echo "Notarized and stapled: $DMG_FILE"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-installer
+          path: releases/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: rust-windows-${{ hashFiles('src-tauri/Cargo.lock', 'src-tauri/tauri.conf.json') }}
+          restore-keys: rust-windows-
+
+      - name: Cache Python packages
+        uses: actions/cache@v4
+        with:
+          path: venv
+          key: python-windows-${{ hashFiles('packages/core/pyproject.toml', 'packages/api/pyproject.toml') }}
+          restore-keys: python-windows-
+
+      - name: Install Python dependencies
+        shell: bash
+        run: |
+          python -m venv venv
+          source venv/Scripts/activate
+          python -m pip install --upgrade pip
+          python -m pip install -e "packages/core" -e "packages/api" "pyinstaller>=6.12.0"
+
+      - name: Install frontend dependencies
+        run: npm --prefix packages/web ci
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Build
+        shell: cmd
+        run: |
+          call venv\Scripts\activate.bat
+          set CI=true
+          call packaging\scripts\build_windows.bat
+
+      - name: Upload MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-msi
+          path: releases/*.msi
+          if-no-files-found: warn
+
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer-exe
+          path: releases/*.exe
+          if-no-files-found: warn

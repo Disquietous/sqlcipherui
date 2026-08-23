@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+# Development Environment Control Script
+# Master script to control all development services
+
+set -e
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Helper functions
+print_error() {
+    echo -e "${RED}Error: $1${NC}" >&2
+}
+
+print_success() {
+    echo -e "${GREEN}$1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}$1${NC}"
+}
+
+print_info() {
+    echo -e "${BLUE}$1${NC}"
+}
+
+print_header() {
+    echo -e "${BLUE}========================================${NC}"
+    echo -e "${BLUE}$1${NC}"
+    echo -e "${BLUE}========================================${NC}"
+}
+
+# Service control functions
+start_all() {
+    print_header "Starting All Services"
+
+    print_info "Starting API server..."
+    "$SCRIPT_DIR/apictl" start
+    echo ""
+
+    print_info "Starting web dev server..."
+    "$SCRIPT_DIR/webctl" start
+    echo ""
+
+    print_success "All services started successfully!"
+    echo ""
+    status_all
+}
+
+stop_all() {
+    print_header "Stopping All Services"
+
+    print_info "Stopping web dev server..."
+    "$SCRIPT_DIR/webctl" stop || true
+    echo ""
+
+    print_info "Stopping API server..."
+    "$SCRIPT_DIR/apictl" stop || true
+    echo ""
+
+    print_success "All services stopped"
+}
+
+restart_all() {
+    print_header "Restarting All Services"
+    stop_all
+    sleep 2
+    start_all
+}
+
+status_all() {
+    print_header "Service Status"
+
+    echo -n "API Server:  "
+    if "$SCRIPT_DIR/apictl" status > /dev/null 2>&1; then
+        print_success "Running"
+    else
+        print_warning "Stopped"
+    fi
+
+    echo -n "Web Server:  "
+    if "$SCRIPT_DIR/webctl" status > /dev/null 2>&1; then
+        print_success "Running"
+    else
+        print_warning "Stopped"
+    fi
+
+    echo ""
+    echo "Quick Links:"
+    echo "  API:      http://localhost:8001"
+    echo "  API Docs: http://localhost:8001/docs"
+    echo "  Web App:  http://localhost:5273"
+}
+
+show_logs() {
+    SERVICE="$1"
+    FOLLOW="${2:-}"
+
+    case "$SERVICE" in
+        api)
+            "$SCRIPT_DIR/apictl" logs "$FOLLOW"
+            ;;
+        web)
+            "$SCRIPT_DIR/webctl" logs "$FOLLOW"
+            ;;
+        all)
+            print_header "Combined Logs (Press Ctrl+C to stop)"
+            tail -f "$PROJECT_ROOT/logs/api.log" "$PROJECT_ROOT/logs/web.log"
+            ;;
+        *)
+            print_error "Unknown service: $SERVICE"
+            echo "Available services: api, web, all"
+            exit 1
+            ;;
+    esac
+}
+
+# Main command handling
+case "$1" in
+    start)
+        if [ -z "$2" ]; then
+            start_all
+        else
+            case "$2" in
+                api)
+                    "$SCRIPT_DIR/apictl" start
+                    ;;
+                web)
+                    "$SCRIPT_DIR/webctl" start
+                    ;;
+                *)
+                    print_error "Unknown service: $2"
+                    echo "Available services: api, web"
+                    exit 1
+                    ;;
+            esac
+        fi
+        ;;
+    stop)
+        if [ -z "$2" ]; then
+            stop_all
+        else
+            case "$2" in
+                api)
+                    "$SCRIPT_DIR/apictl" stop
+                    ;;
+                web)
+                    "$SCRIPT_DIR/webctl" stop
+                    ;;
+                *)
+                    print_error "Unknown service: $2"
+                    echo "Available services: api, web"
+                    exit 1
+                    ;;
+            esac
+        fi
+        ;;
+    restart)
+        if [ -z "$2" ]; then
+            restart_all
+        else
+            case "$2" in
+                api)
+                    "$SCRIPT_DIR/apictl" restart
+                    ;;
+                web)
+                    "$SCRIPT_DIR/webctl" restart
+                    ;;
+                *)
+                    print_error "Unknown service: $2"
+                    echo "Available services: api, web"
+                    exit 1
+                    ;;
+            esac
+        fi
+        ;;
+    status)
+        status_all
+        ;;
+    logs)
+        SERVICE="${2:-all}"
+        FOLLOW="$3"
+        show_logs "$SERVICE" "$FOLLOW"
+        ;;
+    *)
+        echo "Development Environment Control Script"
+        echo ""
+        echo "Usage: $0 {start|stop|restart|status|logs} [service] [options]"
+        echo ""
+        echo "Commands:"
+        echo "  start [service]    - Start all services or a specific service"
+        echo "  stop [service]     - Stop all services or a specific service"
+        echo "  restart [service]  - Restart all services or a specific service"
+        echo "  status             - Show status of all services"
+        echo "  logs [service] [-f] - Show logs (use -f to follow)"
+        echo ""
+        echo "Services:"
+        echo "  api   - API server (FastAPI on :8001)"
+        echo "  web   - Web dev server (Vite on :5273)"
+        echo "  all   - All services (default)"
+        echo ""
+        echo "Examples:"
+        echo "  $0 start              # Start all services"
+        echo "  $0 start api          # Start only the API server"
+        echo "  $0 stop               # Stop all services"
+        echo "  $0 restart web        # Restart only the web server"
+        echo "  $0 status             # Check status of all services"
+        echo "  $0 logs api -f        # Follow API logs"
+        echo "  $0 logs all -f        # Follow all logs"
+        exit 1
+        ;;
+esac
