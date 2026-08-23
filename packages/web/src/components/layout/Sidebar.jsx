@@ -3,7 +3,7 @@ import { useUiStore } from '../../stores/ui';
 import { useConnectionStore } from '../../stores/connection';
 import { useTabsStore } from '../../stores/tabs';
 import { Icon } from '../icons/Icon';
-import { getTables, getViews, getIndexes, getTriggers } from '../../api/schema';
+import { getTables, getViews, getIndexes, getTriggers, getTableDetail } from '../../api/schema';
 import { closeDatabase } from '../../api/database';
 
 const cx = (...xs) => xs.filter(Boolean).join(' ');
@@ -182,6 +182,17 @@ function DatabaseSchemaSection({ conn, isActive, onActivate, onClose, onSelect, 
                 )}
                 {g.items.map(it => {
                   const tabId = `${conn.path}::${it.name}`;
+                  if (g.name === 'tables') {
+                    return (
+                      <TableItem
+                        key={it.name}
+                        table={it}
+                        db={conn.path}
+                        selected={activeTabId === tabId}
+                        onSelect={() => onSelect(g.name, it.name)}
+                      />
+                    );
+                  }
                   return (
                     <button
                       key={it.name}
@@ -190,9 +201,6 @@ function DatabaseSchemaSection({ conn, isActive, onActivate, onClose, onSelect, 
                     >
                       <Icon name={g.icon} size={13} />
                       <span className="sb-item-name">{it.name}</span>
-                      {g.showRows && it.row_count !== undefined && (
-                        <span className="sb-item-meta">{it.row_count.toLocaleString()}</span>
-                      )}
                       {it.meta === 'U' && <span className="sb-tag">U</span>}
                     </button>
                   );
@@ -202,6 +210,88 @@ function DatabaseSchemaSection({ conn, isActive, onActivate, onClose, onSelect, 
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function columnBadges(col, detail) {
+  const badges = [];
+  if (col.pk) badges.push({ key: 'PK', title: 'Primary key' });
+  const fk = (detail.foreign_keys || []).find(f => f.from_column === col.name);
+  if (fk) badges.push({ key: 'FK', title: `References ${fk.to_table}.${fk.to_column}` });
+  const idxs = (detail.indexes || []).filter(i => i.columns?.includes(col.name));
+  const uniq = idxs.find(i => i.unique);
+  if (!col.pk && (col.unique || uniq)) {
+    badges.push({ key: 'U', title: uniq ? `Unique index ${uniq.name}` : 'Unique' });
+  } else if (idxs.length > 0) {
+    badges.push({ key: 'IX', title: idxs.map(i => i.name).join(', ') });
+  }
+  if (col.notnull && !col.pk) badges.push({ key: 'NN', title: 'NOT NULL' });
+  return badges;
+}
+
+function TableItem({ table, db, selected, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    getTableDetail(table.name, db)
+      .then(d => { if (!cancelled) { setDetail(d); setError(null); } })
+      .catch(e => { if (!cancelled) setError(e?.message || 'Failed to load columns'); });
+    return () => { cancelled = true; };
+  }, [open, table.name, db]);
+
+  return (
+    <div className="sb-table">
+      <button
+        className={cx('sb-item sb-item-table', selected && 'is-selected')}
+        onClick={onSelect}
+      >
+        <span
+          className="sb-item-toggle"
+          role="button"
+          title={open ? 'Hide columns' : 'Show columns'}
+          onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        >
+          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={10} />
+        </span>
+        <Icon name="table" size={13} />
+        <span className="sb-item-name">{table.name}</span>
+        {table.row_count !== undefined && (
+          <span className="sb-item-meta">{table.row_count.toLocaleString()}</span>
+        )}
+      </button>
+      {open && (
+        <div className="sb-cols">
+          {error && <div className="sb-col sb-col-empty">{error}</div>}
+          {!error && !detail && <div className="sb-col sb-col-empty">Loading…</div>}
+          {!error && detail && detail.columns.length === 0 && (
+            <div className="sb-col sb-col-empty">No columns</div>
+          )}
+          {!error && detail && detail.columns.map(col => {
+            const badges = columnBadges(col, detail);
+            return (
+              <div key={col.name} className="sb-col" title={`${col.name} ${col.type || ''}`.trim()}>
+                <Icon name={col.pk ? 'key' : 'columns'} size={11} />
+                <span className="sb-col-name">{col.name}</span>
+                <span className="sb-col-type">{col.type || '—'}</span>
+                {badges.length > 0 && (
+                  <span className="sb-col-badges">
+                    {badges.map(b => (
+                      <span key={b.key} className={cx('sb-tag', `sb-tag-${b.key.toLowerCase()}`)} title={b.title}>
+                        {b.key}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

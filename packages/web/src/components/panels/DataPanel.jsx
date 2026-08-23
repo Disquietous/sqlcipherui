@@ -27,7 +27,7 @@ function exportCsv(columns, rows, tableName) {
 }
 
 export function DataPanel({ table, db }) {
-  const [subtab, setSubtab] = useState('data');
+  const [subtab, setSubtab] = useState('query');
   const [allRows, setAllRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [total, setTotal] = useState(0);
@@ -41,7 +41,7 @@ export function DataPanel({ table, db }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    setSubtab('data');
+    setSubtab('query');
     setAllRows([]);
     setColumns([]);
     setTotal(0);
