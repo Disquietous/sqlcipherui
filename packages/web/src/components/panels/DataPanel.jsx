@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { fetchRows, insertRow, updateRow, deleteRow } from '../../api/data';
 import { getTableDetail } from '../../api/schema';
 import { Icon } from '../icons/Icon';
-import { SqlReadOnly } from '../shared/SqlEditor';
+import { SqlView } from '../shared/SqlView';
 import { DataGrid, formatCell, cellClass } from '../shared/DataGrid';
 import { RowDetail } from '../shared/RowDetail';
 import { QueryPanel } from './QueryPanel';
@@ -27,7 +27,7 @@ function exportCsv(columns, rows, tableName) {
 }
 
 export function DataPanel({ table, db }) {
-  const [subtab, setSubtab] = useState('query');
+  const [subtab, setSubtab] = useState('structure');
   const [allRows, setAllRows] = useState([]);
   const [columns, setColumns] = useState([]);
   const [total, setTotal] = useState(0);
@@ -41,7 +41,7 @@ export function DataPanel({ table, db }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    setSubtab('query');
+    setSubtab('structure');
     setAllRows([]);
     setColumns([]);
     setTotal(0);
@@ -498,5 +498,11 @@ function TriggerRow({ trg, index }) {
 
 function SqlTab({ detail }) {
   if (!detail) return <div className="muted" style={{ padding: 16 }}>Loading...</div>;
-  return <SqlReadOnly sql={detail.create_sql || '-- No CREATE statement available'} />;
+  return (
+    <SqlView
+      formatted={detail.create_sql_formatted}
+      raw={detail.create_sql}
+      emptyMessage="-- No CREATE statement available"
+    />
+  );
 }

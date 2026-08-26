@@ -213,8 +213,11 @@
 /* ---- sidebar ----------------------------------------------------------- */
 .sqlui .sb {
   font-size: 0.923rem;
-  width: 252px;
-  flex: 0 0 252px;
+  /* Auto-size to the schema tree's widest row so nothing is truncated; 252px is the floor */
+  width: max-content;
+  min-width: 252px;
+  max-width: 60vw;
+  flex: 0 0 auto;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
   display: flex;
@@ -245,7 +248,7 @@
 .sqlui .sb-db-header:hover { background: var(--row-hover); }
 .sqlui .sb-db-header.is-active { color: var(--accent); }
 .sqlui .sb-db-header.is-active svg { color: var(--accent); }
-.sqlui .sb-db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sqlui .sb-db-name { flex: 1; white-space: nowrap; }
 .sqlui .sb-db-close {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px;
@@ -285,8 +288,15 @@
 .sqlui .sb-scroll {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 0 12px;
 }
+/* Let schema tree rows size to their content so the sidebar width follows the widest row */
+.sqlui .sb-scroll .sb-db-section,
+.sqlui .sb-scroll .sb-group,
+.sqlui .sb-scroll .sb-items,
+.sqlui .sb-scroll .sb-cols,
+.sqlui .sb-scroll .sb-table { width: max-content; min-width: 100%; }
 
 .sqlui .sb-group {
   margin-bottom: 4px;
@@ -356,7 +366,7 @@
 }
 .sqlui .sb-item.is-selected svg { color: var(--accent); }
 .sqlui .sb-item svg { color: var(--text-2); flex: 0 0 auto; }
-.sqlui .sb-item-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sqlui .sb-item-name { flex: 1 1 auto; white-space: nowrap; }
 .sqlui .sb-item-meta {
   font-family: var(--font-mono);
   font-size: 0.833em;
@@ -390,16 +400,14 @@
 }
 .sqlui .sb-col:hover { background: var(--row-hover); }
 .sqlui .sb-col svg { color: var(--text-3); flex: 0 0 auto; }
-.sqlui .sb-col-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sqlui .sb-col-name { flex: 1 1 auto; white-space: nowrap; }
 .sqlui .sb-col-type {
   font-family: var(--font-mono);
   font-size: 0.833em;
   color: var(--text-3);
   text-transform: uppercase;
   white-space: nowrap;
-  flex: 0 1 auto;
-  overflow: hidden; text-overflow: ellipsis;
-  max-width: 40%;
+  flex: 0 0 auto;
 }
 .sqlui .sb-col-badges { display: inline-flex; gap: 3px; flex: 0 0 auto; }
 .sqlui .sb-col-empty { color: var(--text-3); font-style: italic; }
@@ -462,7 +470,7 @@
 .sqlui .sb-db-header:hover { background: var(--row-hover); }
 .sqlui .sb-db-header.is-active { color: var(--accent); }
 .sqlui .sb-db-header svg { flex: 0 0 auto; }
-.sqlui .sb-db-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sqlui .sb-db-name { flex: 1; white-space: nowrap; }
 
 /* ---- main / tabs / content --------------------------------------------- */
 .sqlui .main {
@@ -482,7 +490,30 @@
   border-bottom: 1px solid var(--border);
   height: 32px;
   flex: 0 0 32px;
+  min-width: 0;
 }
+/* Scrollable strip holding the tabs; overflow is reached via the arrow buttons (scrollbar hidden) */
+.sqlui .tabs-strip {
+  display: flex;
+  align-items: stretch;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.sqlui .tabs-strip::-webkit-scrollbar { display: none; }
+.sqlui .tab-scroll {
+  width: 24px;
+  flex: 0 0 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: none; cursor: pointer;
+  color: var(--text-2);
+  border-right: 1px solid var(--border-soft);
+  padding: 0;
+}
+.sqlui .tab-scroll:hover:not(:disabled) { background: var(--bg-3); color: var(--text); }
+.sqlui .tab-scroll:disabled { color: var(--text-3); cursor: default; opacity: 0.5; }
 .sqlui .tab {
   display: flex; align-items: center; gap: 7px;
   padding: 0 10px;
@@ -491,7 +522,8 @@
   cursor: pointer;
   border-right: 1px solid var(--border-soft);
   position: relative;
-  min-width: 0;
+  flex: 0 0 auto;
+  min-width: 120px;
   max-width: 200px;
 }
 .sqlui .tab:hover { background: var(--bg-3); color: var(--text); }
@@ -513,10 +545,12 @@
   height: 1px;
   background: var(--bg);
 }
-.sqlui .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sqlui .tab-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sqlui .tab-dirty { color: var(--accent); }
+.sqlui .tab > svg { flex: 0 0 auto; }
 .sqlui .tab-close {
   width: 24px; height: 24px;
+  flex: 0 0 24px;
   display: inline-flex; align-items: center; justify-content: center;
   background: transparent; border: none; cursor: pointer;
   color: var(--text-2);
@@ -964,6 +998,9 @@
 .sqlui .sql-editor-inner {
   position: relative;
   min-height: 100%;
+  /* Grow with the longest line so the textarea overlay covers all unwrapped text */
+  width: max-content;
+  min-width: 100%;
 }
 .sqlui .sql-editor-pre,
 .sqlui .sql-editor-ta {
@@ -980,8 +1017,7 @@
   border: none;
   outline: none;
   color: var(--text);
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: pre;
   tab-size: 2;
 }
 .sqlui .sql-editor-pre {
@@ -1010,11 +1046,33 @@
   font-size: 0.962em;
   line-height: 1.6;
   color: var(--text);
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  white-space: pre;
   background: transparent;
   overflow: auto;
 }
+/* Formatted / Raw SQL toggle above a read-only SQL block */
+.sqlui .sql-view { display: flex; flex-direction: column; min-height: 0; }
+.sqlui .sql-view-tabs {
+  display: flex; align-items: center; gap: 2px;
+  padding: 4px 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+  font-size: 0.846rem;
+  flex: 0 0 auto;
+}
+.sqlui .sql-view-tab {
+  background: transparent; border: none; cursor: pointer;
+  padding: 5px 10px 6px;
+  font-size: 1em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  font-weight: 500;
+}
+.sqlui .sql-view-tab:hover:not(:disabled) { color: var(--text); }
+.sqlui .sql-view-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+.sqlui .sql-view-tab:disabled { color: var(--text-3); cursor: default; }
 
 .sqlui .tok-kw { color: var(--kw); font-weight: 600; }
 .sqlui .tok-str { color: var(--str); }
@@ -1215,6 +1273,9 @@
 }
 .sqlui .row-kv:last-child { border-bottom: none; }
 .sqlui .row-kv b { color: var(--text); font-family: var(--font-mono); font-weight: 500; font-size: 0.958em; }
+/* Left-aligned key/value rows: fixed-width label, value follows immediately */
+.sqlui .row-kv-left { justify-content: flex-start; gap: 12px; }
+.sqlui .row-kv-left > span:first-child { flex: 0 0 80px; }
 .sqlui .bar-row {
   display: grid;
   grid-template-columns: 100px 1fr 70px;

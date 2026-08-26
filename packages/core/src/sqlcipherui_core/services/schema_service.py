@@ -14,6 +14,7 @@ from sqlcipherui_core.models.schema import (
     ViewInfo,
 )
 from sqlcipherui_core.services.db_manager import DatabaseManager
+from sqlcipherui_core.services.sql_format import format_sql
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class SchemaService:
         ]
 
         # Indexes
+        index_sql = await self._index_sql_map()
         indexes: list[IndexInfo] = []
         for idx_row in idx_list:
             idx_name = idx_row[1]
@@ -96,12 +98,15 @@ class SchemaService:
                 f'PRAGMA index_info("{idx_name}")'
             )
             idx_columns = [r[2] for r in idx_info_rows]
+            sql = index_sql.get(idx_name)
             indexes.append(
                 IndexInfo(
                     name=idx_name,
                     table_name=name,
                     columns=idx_columns,
                     unique=idx_unique,
+                    sql=sql,
+                    sql_formatted=format_sql(sql),
                 )
             )
 
@@ -116,6 +121,7 @@ class SchemaService:
                 table_name=name,
                 event=_parse_trigger_event(row[1] or ""),
                 sql=row[1] or "",
+                sql_formatted=format_sql(row[1]),
             )
             for row in trigger_rows
         ]
@@ -134,7 +140,7 @@ class SchemaService:
 
         # CREATE SQL
         create_rows = await self._db.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+            "SELECT sql FROM sqlite_master WHERE type IN ('table', 'view') AND name=?",
             (name,),
         )
         create_sql = create_rows[0][0] if create_rows else None
@@ -156,6 +162,7 @@ class SchemaService:
             triggers=triggers,
             foreign_keys=foreign_keys,
             create_sql=create_sql,
+            create_sql_formatted=format_sql(create_sql),
             row_count=row_count,
         )
 
@@ -164,13 +171,17 @@ class SchemaService:
         rows = await self._db.execute(
             "SELECT name, sql FROM sqlite_master WHERE type='view' ORDER BY name"
         )
-        return [ViewInfo(name=row[0], sql=row[1] or "") for row in rows]
+        return [
+            ViewInfo(name=row[0], sql=row[1] or "", sql_formatted=format_sql(row[1]))
+            for row in rows
+        ]
 
     async def get_indexes(self) -> list[IndexInfo]:
         """Return all indexes across every table."""
         table_rows = await self._db.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
         )
+        index_sql = await self._index_sql_map()
         indexes: list[IndexInfo] = []
         for (table_name,) in table_rows:
             idx_list = await self._db.execute(
@@ -183,15 +194,25 @@ class SchemaService:
                     f'PRAGMA index_info("{idx_name}")'
                 )
                 idx_columns = [r[2] for r in idx_info_rows]
+                sql = index_sql.get(idx_name)
                 indexes.append(
                     IndexInfo(
                         name=idx_name,
                         table_name=table_name,
                         columns=idx_columns,
                         unique=idx_unique,
+                        sql=sql,
+                        sql_formatted=format_sql(sql),
                     )
                 )
         return indexes
+
+    async def _index_sql_map(self) -> dict[str, str | None]:
+        """Map index name -> CREATE INDEX sql (None for auto-indexes)."""
+        rows = await self._db.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='index'"
+        )
+        return {row[0]: row[1] for row in rows}
 
     async def get_triggers(self) -> list[TriggerInfo]:
         """Return all triggers in the database."""
@@ -204,6 +225,7 @@ class SchemaService:
                 table_name=row[1],
                 event=_parse_trigger_event(row[2] or ""),
                 sql=row[2] or "",
+                sql_formatted=format_sql(row[2]),
             )
             for row in rows
         ]

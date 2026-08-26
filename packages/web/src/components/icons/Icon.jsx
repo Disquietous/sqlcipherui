@@ -62,6 +62,9 @@ export function Icon({ name, size = 16, stroke = 1.6, style }) {
     case 'chevron-right': return (
       <svg {...props}><path d="m9 6 6 6-6 6"/></svg>
     );
+    case 'chevron-left': return (
+      <svg {...props}><path d="m15 6-6 6 6 6"/></svg>
+    );
     case 'chevron-down': return (
       <svg {...props}><path d="m6 9 6 6 6-6"/></svg>
     );

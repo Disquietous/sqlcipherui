@@ -12,6 +12,7 @@ dependencies = [
     "pydantic>=2.0",
     "sqlcipher3>=0.5.4",
     "platformdirs>=4.0",
+    "sqlparse>=0.5",
 ]
 
 [project.optional-dependencies]

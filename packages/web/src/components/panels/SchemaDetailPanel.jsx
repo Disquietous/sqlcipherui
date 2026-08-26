@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Icon } from '../icons/Icon';
+import { SqlView } from '../shared/SqlView';
 import { getIndexes, getTriggers } from '../../api/schema';
 
 export function SchemaDetailPanel({ name, kind, db }) {
@@ -33,9 +34,16 @@ export function SchemaDetailPanel({ name, kind, db }) {
         <h3 style={{ margin: '0 0 16px', fontSize: '1.154em', fontWeight: 600 }}>
           <Icon name="key" size={14} /> Index: <span className="mono">{detail.name}</span>
         </h3>
-        <div className="row-kv"><span>Table</span><b className="mono">{detail.table_name}</b></div>
-        <div className="row-kv"><span>Columns</span><b className="mono">{(detail.columns || []).join(', ')}</b></div>
-        <div className="row-kv"><span>Unique</span><b>{detail.unique ? 'Yes' : 'No'}</b></div>
+        <div className="row-kv row-kv-left"><span>Table</span><b className="mono">{detail.table_name}</b></div>
+        <div className="row-kv row-kv-left"><span>Columns</span><b className="mono">{(detail.columns || []).join(', ')}</b></div>
+        <div className="row-kv row-kv-left"><span>Unique</span><b>{detail.unique ? 'Yes' : 'No'}</b></div>
+        <div style={{ marginTop: 16 }}>
+          <SqlView
+            formatted={detail.sql_formatted}
+            raw={detail.sql}
+            emptyMessage="-- Automatic index (no CREATE INDEX statement)"
+          />
+        </div>
       </div>
     );
   }
@@ -45,11 +53,11 @@ export function SchemaDetailPanel({ name, kind, db }) {
       <h3 style={{ margin: '0 0 16px', fontSize: '1.154em', fontWeight: 600 }}>
         <Icon name="settings" size={14} /> Trigger: <span className="mono">{detail.name}</span>
       </h3>
-      <div className="row-kv"><span>Table</span><b className="mono">{detail.table_name}</b></div>
-      <div className="row-kv"><span>Event</span><b className="mono">{detail.event}</b></div>
-      <pre className="mono" style={{ marginTop: 16, padding: 12, background: 'var(--bg-2)', borderRadius: 6, whiteSpace: 'pre-wrap', fontSize: '0.923em' }}>
-        {detail.sql}
-      </pre>
+      <div className="row-kv row-kv-left"><span>Table</span><b className="mono">{detail.table_name}</b></div>
+      <div className="row-kv row-kv-left"><span>Event</span><b className="mono">{detail.event}</b></div>
+      <div style={{ marginTop: 16 }}>
+        <SqlView formatted={detail.sql_formatted} raw={detail.sql} />
+      </div>
     </div>
   );
 }

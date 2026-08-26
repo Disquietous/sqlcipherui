@@ -74,6 +74,7 @@ export function SqlEditor({ value, onChange, onRun, readOnly = false, minRows = 
           onChange={readOnly ? undefined : (e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           readOnly={readOnly}
+          wrap="off"
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"

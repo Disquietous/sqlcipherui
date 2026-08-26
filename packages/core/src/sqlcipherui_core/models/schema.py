@@ -32,6 +32,8 @@ class IndexInfo(BaseModel):
     table_name: str
     columns: list[str]
     unique: bool = False
+    sql: str | None = None
+    sql_formatted: str | None = None
 
 
 class TriggerInfo(BaseModel):
@@ -41,6 +43,7 @@ class TriggerInfo(BaseModel):
     table_name: str
     event: str
     sql: str
+    sql_formatted: str | None = None
 
 
 class ViewInfo(BaseModel):
@@ -48,6 +51,7 @@ class ViewInfo(BaseModel):
 
     name: str
     sql: str
+    sql_formatted: str | None = None
 
 
 class ForeignKey(BaseModel):
@@ -68,4 +72,5 @@ class TableDetail(BaseModel):
     triggers: list[TriggerInfo]
     foreign_keys: list[ForeignKey]
     create_sql: str | None = None
+    create_sql_formatted: str | None = None
     row_count: int | None = None
