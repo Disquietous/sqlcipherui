@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, useRef, useCallback, memo } from 'react';
 import { Icon } from '../icons/Icon';
 
 const cx = (...xs) => xs.filter(Boolean).join(' ');
@@ -17,7 +17,13 @@ export function formatCell(val) {
   return String(val);
 }
 
-export function RowCells({ row, rowIndex, columns, selected, onSelect, onRowDetail, editCell, editValue, onStartEdit, onEditChange, onCommitEdit, onCancelEdit }) {
+/**
+ * One row of cells. Memoized: a row only re-renders when its own props change
+ * (its data, its selection state, or its editing state) — not on every parent
+ * render. `editing` is null except for the row being edited.
+ */
+export const RowCells = memo(function RowCells({ row, rowIndex, columns, selected, onSelectRow, onRowDetail, editing, onStartEdit, onEditChange, onCommitEdit, onCancelEdit }) {
+  const onSelect = onSelectRow ? () => onSelectRow(rowIndex) : undefined;
   return (
     <>
       <div
@@ -28,7 +34,7 @@ export function RowCells({ row, rowIndex, columns, selected, onSelect, onRowDeta
         {rowIndex + 1}
       </div>
       {row.map((val, ci) => {
-        const isEditing = editCell && editCell.ri === rowIndex && editCell.ci === ci;
+        const isEditing = editing && editing.ci === ci;
         return (
           <div
             key={ci}
@@ -39,7 +45,7 @@ export function RowCells({ row, rowIndex, columns, selected, onSelect, onRowDeta
             {isEditing ? (
               <input
                 className="cell-input mono"
-                value={editValue}
+                value={editing.value}
                 onChange={(e) => onEditChange(e.target.value)}
                 onBlur={onCommitEdit}
                 onKeyDown={(e) => {
@@ -56,22 +62,35 @@ export function RowCells({ row, rowIndex, columns, selected, onSelect, onRowDeta
       })}
     </>
   );
-}
+});
 
-export function DataGrid({ columns, rows, sort, dir, onSort, selectedRow, onSelectRow, onRowDetail, editable, beforeRows }) {
+/**
+ * Memoized so parents that re-render on every keystroke (e.g. the query
+ * editor updating its text state) don't re-render the entire grid.
+ */
+export const DataGrid = memo(function DataGrid({ columns, rows, sort, dir, onSort, selectedRow, onSelectRow, onRowDetail, editable, beforeRows }) {
   const [editCell, setEditCell] = useState(null);
   const [editValue, setEditValue] = useState('');
+
+  // Keep edit state in a ref so the commit/cancel callbacks stay stable and
+  // non-editing rows don't re-render while typing in a cell.
+  const editRef = useRef({ editCell: null, editValue: '', rows, editable });
+  editRef.current.editCell = editCell;
+  editRef.current.editValue = editValue;
+  editRef.current.rows = rows;
+  editRef.current.editable = editable;
 
   const gridCols = columns.length
     ? `36px ${columns.map(() => 'max-content').join(' ')}`
     : '1fr';
 
-  const startEdit = editable ? (ri, ci, val) => {
+  const startEdit = useCallback((ri, ci, val) => {
     setEditCell({ ri, ci });
     setEditValue(val === null || val === undefined ? '' : String(val));
-  } : null;
+  }, []);
 
-  const commitEdit = () => {
+  const commitEdit = useCallback(() => {
+    const { editCell, editValue, rows, editable } = editRef.current;
     if (!editCell) return;
     const oldVal = rows[editCell.ri][editCell.ci];
     const oldStr = oldVal === null || oldVal === undefined ? '' : String(oldVal);
@@ -79,9 +98,9 @@ export function DataGrid({ columns, rows, sort, dir, onSort, selectedRow, onSele
       editable.onCellUpdate(editCell.ri, editCell.ci, editValue);
     }
     setEditCell(null);
-  };
+  }, []);
 
-  const cancelEdit = () => setEditCell(null);
+  const cancelEdit = useCallback(() => setEditCell(null), []);
 
   return (
     <div className="grid" style={{ gridTemplateColumns: gridCols }}>
@@ -110,11 +129,10 @@ export function DataGrid({ columns, rows, sort, dir, onSort, selectedRow, onSele
           rowIndex={ri}
           columns={columns}
           selected={selectedRow === ri}
-          onSelect={onSelectRow ? () => onSelectRow(ri) : undefined}
+          onSelectRow={onSelectRow}
           onRowDetail={onRowDetail}
-          editCell={editCell}
-          editValue={editValue}
-          onStartEdit={startEdit}
+          editing={editCell && editCell.ri === ri ? { ci: editCell.ci, value: editValue } : null}
+          onStartEdit={editable ? startEdit : null}
           onEditChange={setEditValue}
           onCommitEdit={commitEdit}
           onCancelEdit={cancelEdit}
@@ -122,4 +140,4 @@ export function DataGrid({ columns, rows, sort, dir, onSort, selectedRow, onSele
       ))}
     </div>
   );
-}
+});

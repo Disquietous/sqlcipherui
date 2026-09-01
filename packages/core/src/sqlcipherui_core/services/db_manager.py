@@ -313,6 +313,18 @@ class DatabaseManager:
             cols = [d[0] for d in cursor.description] if cursor.description else []
             return [dict(zip(cols, row)) for row in cursor.fetchall()]
 
+    async def run_sync(self, fn):
+        """Run ``fn(conn)`` in a worker thread while holding the connection lock.
+
+        Use this for read-only batches of many small statements (e.g. schema
+        introspection) so they cost one thread hop instead of one per statement.
+        """
+        return await asyncio.to_thread(self._run_sync, fn)
+
+    def _run_sync(self, fn):
+        with self._lock:
+            return fn(self._get_conn())
+
     async def execute_modify(self, sql: str, params: tuple | None = None) -> int:
         return await asyncio.to_thread(self._execute_modify_sync, sql, params)
 

@@ -4,8 +4,8 @@ import { useHistoryStore } from '../../stores/history';
 import { useSavedStore } from '../../stores/saved';
 import { useUiStore } from '../../stores/ui';
 import { useConnectionStore } from '../../stores/connection';
-import { SqlEditor, Highlighted } from '../shared/SqlEditor';
-import { DataGrid } from '../shared/DataGrid';
+import { SqlEditor } from '../shared/SqlEditor';
+import { VirtualGrid } from '../shared/VirtualGrid';
 import { RowDetail } from '../shared/RowDetail';
 import { Icon } from '../icons/Icon';
 
@@ -175,6 +175,7 @@ export function QueryPanel({ initialSql: initialSqlProp, db } = {}) {
               onChange={setSqlText}
               onRun={handleRun}
               minRows={6}
+              db={targetDb}
             />
           </div>
         </div>
@@ -202,17 +203,17 @@ export function QueryPanel({ initialSql: initialSqlProp, db } = {}) {
 
         {activeResultTab === 'results' && result && !result.error && (
           <div className="grid-detail-split">
-            <div className="grid-wrap">
-              {result.columns.length > 0 && (
-                <DataGrid
-                  columns={result.columns}
-                  rows={result.rows}
-                  selectedRow={selectedRow}
-                  onSelectRow={handleSelectRow}
-                  onRowDetail={setDetailRow}
-                />
-              )}
-            </div>
+            {result.columns.length > 0 ? (
+              <VirtualGrid
+                columns={result.columns}
+                rows={result.rows}
+                selectedRow={selectedRow}
+                onSelectRow={handleSelectRow}
+                onRowDetail={setDetailRow}
+              />
+            ) : (
+              <div className="grid-wrap" />
+            )}
             {detailRow !== null && result.rows[detailRow] && (
               <RowDetail
                 columns={result.columns}

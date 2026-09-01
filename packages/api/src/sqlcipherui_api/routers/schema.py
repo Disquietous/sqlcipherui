@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import BaseModel
 
 from sqlcipherui_api.dependencies import ConnManagerDep
 from sqlcipherui_core.models.schema import (
     IndexInfo,
+    SchemaSnapshot,
     TableDetail,
     TableInfo,
     TriggerInfo,
@@ -74,6 +75,29 @@ async def list_triggers(cm: ConnManagerDep, db: str = Query(...)) -> list[Trigge
     mgr = _get_db(cm, db)
     svc = SchemaService(mgr)
     return await svc.get_triggers()
+
+
+@router.get("/completion", response_model=SchemaSnapshot)
+async def get_completion_snapshot(
+    cm: ConnManagerDep,
+    response: Response,
+    db: str = Query(...),
+    if_none_match: str | None = Header(default=None),
+):
+    """Full schema snapshot for editor completion.
+
+    ETag is the SQLite schema_version; send it back as If-None-Match to get a
+    304 without paying for the full introspection.
+    """
+    mgr = _get_db(cm, db)
+    svc = SchemaService(mgr)
+    version = await svc.get_schema_version()
+    etag = f'"{version}"'
+    if if_none_match and etag in {t.strip() for t in if_none_match.split(",")}:
+        return Response(status_code=304, headers={"ETag": etag})
+    snapshot = await svc.get_completion_snapshot()
+    response.headers["ETag"] = f'"{snapshot.schema_version}"'
+    return snapshot
 
 
 @router.post("/execute")

@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from sqlcipherui_core.models.schema import (
     ColumnInfo,
     ForeignKey,
     IndexInfo,
+    SchemaSnapshot,
+    SnapshotColumn,
+    SnapshotObject,
+    SnapshotTable,
     TableDetail,
     TableInfo,
     TriggerInfo,
@@ -207,6 +212,19 @@ class SchemaService:
                 )
         return indexes
 
+    async def get_schema_version(self) -> int:
+        """Return SQLite's schema_version counter (changes on any DDL)."""
+        rows = await self._db.execute("PRAGMA schema_version")
+        return int(rows[0][0]) if rows else 0
+
+    async def get_completion_snapshot(self) -> SchemaSnapshot:
+        """Return every table/view/column/FK across all attached schemas in one round trip.
+
+        Runs entirely inside a single worker-thread call so a large schema costs
+        one lock acquisition and no per-statement event-loop hops.
+        """
+        return await self._db.run_sync(_build_snapshot_sync)
+
     async def _index_sql_map(self) -> dict[str, str | None]:
         """Map index name -> CREATE INDEX sql (None for auto-indexes)."""
         rows = await self._db.execute(
@@ -229,6 +247,101 @@ class SchemaService:
             )
             for row in rows
         ]
+
+
+def _q(ident: str) -> str:
+    """Double-quote an identifier for use in PRAGMA / FROM clauses."""
+    return '"' + ident.replace('"', '""') + '"'
+
+
+_TABLE_OPTIONS_RE = re.compile(
+    r"\)\s*((?:(?:WITHOUT\s+ROWID|STRICT)\s*,?\s*)+)\s*;?\s*$", re.IGNORECASE
+)
+
+
+def _table_options(create_sql: str | None) -> tuple[bool, bool]:
+    """Detect WITHOUT ROWID / STRICT from the tail of a CREATE TABLE statement."""
+    if not create_sql:
+        return False, False
+    m = _TABLE_OPTIONS_RE.search(create_sql)
+    if not m:
+        return False, False
+    tail = m.group(1).upper()
+    return "WITHOUT" in tail, "STRICT" in tail
+
+
+def _build_snapshot_sync(conn) -> SchemaSnapshot:
+    schema_version = int(conn.execute("PRAGMA schema_version").fetchone()[0])
+    schemas = [row[1] for row in conn.execute("PRAGMA database_list").fetchall()]
+
+    tables: list[SnapshotTable] = []
+    indexes: list[SnapshotObject] = []
+    triggers: list[SnapshotObject] = []
+    fks: list[ForeignKey] = []
+
+    for schema in schemas:
+        if schema == "temp":
+            master = "sqlite_temp_master"
+        else:
+            master = f"{_q(schema)}.sqlite_master"
+        rows = conn.execute(
+            f"SELECT type, name, tbl_name, sql FROM {master} "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall()
+
+        for obj_type, name, tbl_name, sql in rows:
+            if obj_type in ("table", "view"):
+                col_rows = conn.execute(
+                    f"PRAGMA {_q(schema)}.table_xinfo({_q(name)})"
+                ).fetchall()
+                columns = [
+                    SnapshotColumn(
+                        name=r[1],
+                        type=r[2] or "",
+                        notnull=bool(r[3]),
+                        pk=bool(r[5]),
+                        hidden=int(r[6]) if len(r) > 6 and r[6] is not None else 0,
+                    )
+                    for r in col_rows
+                ]
+                without_rowid, strict = (
+                    _table_options(sql) if obj_type == "table" else (False, False)
+                )
+                tables.append(
+                    SnapshotTable(
+                        name=name,
+                        schema_name=schema,
+                        kind=obj_type,
+                        columns=columns,
+                        without_rowid=without_rowid,
+                        strict=strict,
+                    )
+                )
+                if obj_type == "table":
+                    for fk in conn.execute(
+                        f"PRAGMA {_q(schema)}.foreign_key_list({_q(name)})"
+                    ).fetchall():
+                        fks.append(
+                            ForeignKey(
+                                from_table=name,
+                                from_column=fk[3],
+                                to_table=fk[2],
+                                to_column=fk[4] or "",
+                            )
+                        )
+            elif obj_type == "index":
+                indexes.append(SnapshotObject(name=name, schema_name=schema, table=tbl_name))
+            elif obj_type == "trigger":
+                triggers.append(SnapshotObject(name=name, schema_name=schema, table=tbl_name))
+
+    return SchemaSnapshot(
+        schema_version=schema_version,
+        schemas=schemas,
+        tables=tables,
+        indexes=indexes,
+        triggers=triggers,
+        foreign_keys=fks,
+    )
 
 
 def _parse_trigger_event(sql: str) -> str:

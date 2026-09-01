@@ -63,6 +63,46 @@ class ForeignKey(BaseModel):
     to_column: str
 
 
+class SnapshotColumn(BaseModel):
+    """Compact column record for the completion snapshot."""
+
+    name: str
+    type: str = ""
+    pk: bool = False
+    notnull: bool = False
+    hidden: int = 0  # PRAGMA table_xinfo: 0 normal, 1 hidden, 2 virtual gen, 3 stored gen
+
+
+class SnapshotTable(BaseModel):
+    """Table or view with its columns, for the completion snapshot."""
+
+    name: str
+    schema_name: str = "main"
+    kind: str = "table"  # "table" | "view"
+    columns: list[SnapshotColumn]
+    without_rowid: bool = False
+    strict: bool = False
+
+
+class SnapshotObject(BaseModel):
+    """Index or trigger name with owning table."""
+
+    name: str
+    schema_name: str = "main"
+    table: str
+
+
+class SchemaSnapshot(BaseModel):
+    """Everything the SQL editor needs for local completion, in one payload."""
+
+    schema_version: int
+    schemas: list[str]
+    tables: list[SnapshotTable]
+    indexes: list[SnapshotObject]
+    triggers: list[SnapshotObject]
+    foreign_keys: list[ForeignKey]
+
+
 class TableDetail(BaseModel):
     """Full detail for a single table."""
 

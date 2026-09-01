@@ -810,6 +810,8 @@
 }
 .sqlui .cell-input:focus { border-color: var(--accent); }
 
+.sqlui .vgrid-spacer { grid-column: 1 / -1; background: var(--bg-2); }
+
 .sqlui .grid-detail-split {
   display: flex;
   flex: 1 1 auto;
@@ -984,60 +986,111 @@
   flex-direction: column;
 }
 
-/* ---- shared sql editor (textarea + pre overlay) -------------------------
-   The pre (highlight) and textarea (input) must render text with identical
-   metrics and never scroll independently: the outer .sql-editor is the only
-   scroller, the pre sizes the inner wrapper, and the textarea stretches over
-   it with its own scrolling disabled. */
+/* ---- shared sql editor (CodeMirror 6) ------------------------------------
+   The host .sql-editor is a flex column; CodeMirror's own scroller handles
+   overflow. Token colours come from the .tok-* classes below via the
+   HighlightStyle in src/editor/theme.js. */
 .sqlui .sql-editor {
   position: relative;
   flex: 1 1 auto;
   min-height: 60px;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.sqlui .sql-editor-inner {
-  position: relative;
-  min-height: 100%;
-  /* Grow with the longest line so the textarea overlay covers all unwrapped text */
-  width: max-content;
-  min-width: 100%;
+.sqlui .sql-editor .cm-editor {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  background: transparent;
+  color: var(--text);
 }
-.sqlui .sql-editor-pre,
-.sqlui .sql-editor-ta {
-  display: block;
-  margin: 0;
-  padding: 10px 14px;
+.sqlui .sql-editor .cm-editor.cm-focused { outline: none; }
+.sqlui .sql-editor .cm-scroller {
   font-family: var(--font-mono);
   font-size: 1em;
   line-height: 1.6;
   letter-spacing: inherit;
-  word-spacing: inherit;
   font-variant-ligatures: none;
-  background: transparent;
-  border: none;
-  outline: none;
-  color: var(--text);
-  white-space: pre;
+  overflow: auto;
   tab-size: 2;
 }
-.sqlui .sql-editor-pre {
-  pointer-events: none;
-  min-height: 100%;
-}
-.sqlui .sql-editor-ta {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  color: transparent;
+.sqlui .sql-editor .cm-content {
+  padding: 10px 0;
   caret-color: var(--text);
-  resize: none;
-  z-index: 1;
 }
-.sqlui .sql-editor-ta::selection {
-  background: color-mix(in srgb, var(--accent) 35%, transparent);
-  color: transparent;
+.sqlui .sql-editor .cm-line { padding: 0 14px; }
+.sqlui .sql-editor .cm-cursor,
+.sqlui .sql-editor .cm-dropCursor { border-left-color: var(--text); }
+.sqlui .sql-editor .cm-selectionBackground,
+.sqlui .sql-editor .cm-focused .cm-selectionBackground,
+.sqlui .sql-editor .cm-content ::selection {
+  background: color-mix(in srgb, var(--accent) 35%, transparent) !important;
+}
+.sqlui .sql-editor .cm-activeLine { background: transparent; }
+.sqlui .sql-editor .cm-matchingBracket,
+.sqlui .sql-editor .cm-focused .cm-matchingBracket {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+}
+.sqlui .sql-editor .cm-placeholder { color: var(--text-3); font-style: italic; }
+
+/* Completion popup */
+.sqlui .cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  overflow: hidden;
+}
+.sqlui .cm-tooltip.cm-tooltip-autocomplete > ul {
+  max-height: 16em;
+  font-family: var(--font-mono);
+}
+.sqlui .cm-tooltip.cm-tooltip-autocomplete > ul > li {
+  padding: 3px 10px 3px 8px;
+  color: var(--text);
+  line-height: 1.5;
+}
+.sqlui .cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--text);
+}
+.sqlui .cm-tooltip-autocomplete .cm-completionLabel { color: var(--text); }
+.sqlui .cm-tooltip-autocomplete .cm-completionMatchedText {
+  text-decoration: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+.sqlui .cm-tooltip-autocomplete .cm-completionDetail {
+  margin-left: 1em;
+  color: var(--text-2);
+  font-style: normal;
+  font-size: 0.85em;
+}
+.sqlui .cm-completionIcon {
+  width: 1.2em;
+  opacity: 0.8;
+  font-size: 0.9em;
+  color: var(--text-2);
+}
+.sqlui .cm-completionIcon-keyword::after { content: 'K'; color: var(--kw); }
+.sqlui .cm-completionIcon-function::after { content: 'ƒ'; color: var(--fn); }
+.sqlui .cm-completionIcon-variable::after { content: 'c'; }
+.sqlui .cm-completionIcon-property::after { content: '🔑'; font-size: 0.75em; }
+.sqlui .cm-completionIcon-class::after { content: 'T'; color: var(--accent); }
+.sqlui .cm-completionIcon-interface::after { content: 'V'; color: var(--accent); }
+.sqlui .cm-completionIcon-namespace::after { content: 'S'; }
+.sqlui .cm-completionIcon-type::after { content: 't'; color: var(--kw); }
+.sqlui .cm-completionIcon-text::after { content: '⋈'; color: var(--accent); }
+.sqlui .cm-tooltip.cm-completionInfo {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-2);
+  font-size: 0.85rem;
+  padding: 6px 8px;
 }
 .sqlui .sql-readonly {
   margin: 0;
