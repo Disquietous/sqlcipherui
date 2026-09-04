@@ -4,7 +4,7 @@ import { RowCells, formatCell } from './DataGrid';
 
 const cx = (...xs) => xs.filter(Boolean).join(' ');
 
-const MIN_COL = 60;   // px
+const MIN_COL = 40;   // px
 const MAX_COL = 480;  // px
 const CELL_PAD = 21;  // horizontal padding + borders
 
@@ -36,18 +36,79 @@ export function VirtualGrid({ columns, rows, selectedRow, onSelectRow, onRowDeta
     setMetrics((m) => (Math.abs(m.charW - charW) < 0.01 && m.rowH === rowH ? m : { charW, rowH }));
   }, []);
 
-  const gridCols = useMemo(() => {
-    const widths = columns.map((col, ci) => {
-      let maxLen = String(col.name || '').length + (col.type ? String(col.type).length + 1 : 0) + 4;
-      for (let r = 0; r < rows.length; r++) {
-        const len = formatCell(rows[r][ci]).length;
-        if (len > maxLen) maxLen = len;
+  // Measured natural width of each header cell (name + type), in px.
+  const [headerWidths, setHeaderWidths] = useState([]);
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const probe = document.createElement('div');
+    probe.className = 'grid';
+    probe.style.position = 'absolute';
+    probe.style.visibility = 'hidden';
+    probe.style.gridTemplateColumns = columns.map(() => 'max-content').join(' ');
+    for (const col of columns) {
+      const h = document.createElement('div');
+      h.className = 'gh';
+      const name = document.createElement('span');
+      name.className = 'gh-name';
+      name.textContent = col.name || '';
+      h.appendChild(name);
+      if (col.type) {
+        const type = document.createElement('span');
+        type.className = 'gh-type';
+        type.textContent = col.type;
+        h.appendChild(type);
       }
-      return Math.max(MIN_COL, Math.min(MAX_COL, Math.ceil(maxLen * metrics.charW) + CELL_PAD));
-    });
+      probe.appendChild(h);
+    }
+    el.appendChild(probe);
+    const widths = Array.from(probe.children, (h) => Math.ceil(h.getBoundingClientRect().width) + 1);
+    el.removeChild(probe);
+    setHeaderWidths(widths);
+  }, [columns]);
+
+  // Natural (uncapped) content width of each column, in px.
+  const contentWidths = useMemo(() => columns.map((col, ci) => {
+    let maxLen = 0;
+    for (let r = 0; r < rows.length; r++) {
+      const len = formatCell(rows[r][ci]).length;
+      if (len > maxLen) maxLen = len;
+    }
+    const cellW = Math.ceil(maxLen * metrics.charW) + CELL_PAD;
+    return Math.max(MIN_COL, cellW, headerWidths[ci] || 0);
+  }), [columns, rows, metrics, headerWidths]);
+
+  // User-set widths (by column index); reset whenever the result set changes.
+  const [overrides, setOverrides] = useState({});
+  useLayoutEffect(() => { setOverrides({}); }, [columns, rows]);
+
+  const gridCols = useMemo(() => {
+    const widths = contentWidths.map((w, ci) => overrides[ci] ?? Math.min(MAX_COL, w));
     const numW = Math.max(36, String(rows.length).length * metrics.charW + 16);
     return `${Math.ceil(numW)}px ${widths.map((w) => `${w}px`).join(' ')}`;
-  }, [columns, rows, metrics]);
+  }, [contentWidths, overrides, rows.length, metrics]);
+
+  const fitColumn = (ci) => setOverrides((o) => ({ ...o, [ci]: contentWidths[ci] }));
+
+  const startResize = (e, ci) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = overrides[ci] ?? Math.min(MAX_COL, contentWidths[ci]);
+    const onMove = (ev) => {
+      const w = Math.max(MIN_COL, Math.round(startW + ev.clientX - startX));
+      setOverrides((o) => (o[ci] === w ? o : { ...o, [ci]: w }));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -69,6 +130,12 @@ export function VirtualGrid({ columns, rows, selectedRow, onSelectRow, onRowDeta
           <div key={col.name || i} className="gh">
             <span className="gh-name">{col.name}</span>
             {col.type && <span className="gh-type">{col.type}</span>}
+            <div
+              className="gh-resize"
+              title="Drag to resize, double-click to fit"
+              onMouseDown={(e) => startResize(e, i)}
+              onDoubleClick={(e) => { e.stopPropagation(); fitColumn(i); }}
+            />
           </div>
         ))}
         {padTop > 0 && <div className="vgrid-spacer" style={{ height: padTop }} />}

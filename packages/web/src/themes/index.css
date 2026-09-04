@@ -729,6 +729,15 @@
   z-index: 1;
 }
 .sqlui .gh:hover { background: var(--bg-titlebar); }
+.sqlui .gh-resize {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 2;
+}
+.sqlui .gh-resize:hover,
+.sqlui .gh-resize:active { background: var(--accent); opacity: 0.6; }
 .sqlui .gh-num {
   text-align: center;
   justify-content: center;
