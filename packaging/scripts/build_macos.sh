@@ -8,7 +8,7 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PACKAGING_DIR="$PROJECT_ROOT/packaging"
 TAURI_DIR="$PROJECT_ROOT/src-tauri"
-VENV="$PROJECT_ROOT/venv"
+VENV="$PROJECT_ROOT/.venv"
 VERSION=$(grep '"version"' "$TAURI_DIR/tauri.conf.json" | head -1 | sed 's/.*: *"\(.*\)".*/\1/')
 
 echo "Building SQLCipherUI v${VERSION} for macOS..."

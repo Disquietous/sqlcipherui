@@ -12,7 +12,6 @@ PROJECT_ROOT = SPEC_DIR.parent
 _binaries = (
     collect_dynamic_libs('sqlcipher3')
     + collect_dynamic_libs('pydantic_core')
-    + collect_dynamic_libs('greenlet')
     + collect_dynamic_libs('markupsafe')
     + (collect_dynamic_libs('uvloop') if sys.platform == 'darwin' else [])
 )
@@ -56,9 +55,6 @@ a = Analysis(
         # --- SQLCipher ---
         'sqlcipher3',
         'sqlcipher3.dbapi2',
-
-        # --- Async ---
-        'greenlet',
 
         # --- Pydantic ---
         'pydantic',

@@ -40,14 +40,14 @@ jobs:
       - name: Cache Python packages
         uses: actions/cache@v4
         with:
-          path: venv
+          path: .venv
           key: python-macos-${{ hashFiles('packages/core/pyproject.toml', 'packages/api/pyproject.toml') }}
           restore-keys: python-macos-
 
       - name: Install Python dependencies
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m venv .venv
+          source .venv/bin/activate
           pip install --upgrade pip
           pip install -e "packages/core" -e "packages/api" "pyinstaller>=6.12.0" Pillow
 
@@ -81,7 +81,7 @@ jobs:
         env:
           CI: "true"
         run: |
-          source venv/bin/activate
+          source .venv/bin/activate
           bash packaging/scripts/build_macos.sh
 
       - name: Sign app bundle
@@ -205,15 +205,15 @@ jobs:
       - name: Cache Python packages
         uses: actions/cache@v4
         with:
-          path: venv
+          path: .venv
           key: python-windows-${{ hashFiles('packages/core/pyproject.toml', 'packages/api/pyproject.toml') }}
           restore-keys: python-windows-
 
       - name: Install Python dependencies
         shell: bash
         run: |
-          python -m venv venv
-          source venv/Scripts/activate
+          python -m venv .venv
+          source .venv/Scripts/activate
           python -m pip install --upgrade pip
           python -m pip install -e "packages/core" -e "packages/api" "pyinstaller>=6.12.0"
 
@@ -226,7 +226,7 @@ jobs:
       - name: Build
         shell: cmd
         run: |
-          call venv\Scripts\activate.bat
+          call .venv\Scripts\activate.bat
           set CI=true
           call packaging\scripts\build_windows.bat
 

@@ -8,7 +8,7 @@ REM
 set PROJECT_ROOT=%~dp0..\..
 set PACKAGING_DIR=%PROJECT_ROOT%\packaging
 set TAURI_DIR=%PROJECT_ROOT%\src-tauri
-set VENV=%PROJECT_ROOT%\venv
+set VENV=%PROJECT_ROOT%\.venv
 
 REM Read version from tauri.conf.json
 for /f "tokens=2 delims=:" %%a in ('findstr /C:"\"version\"" "%TAURI_DIR%\tauri.conf.json"') do (

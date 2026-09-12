@@ -73,6 +73,7 @@ logs/
 
 # Tauri
 src-tauri/target/
+src-tauri/gen/schemas/
 src-tauri/binaries/
 
 # Packaging
