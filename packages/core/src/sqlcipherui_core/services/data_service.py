@@ -112,7 +112,7 @@ class DataService:
         if cached is not None:
             return {
                 "columns": cached["columns"],
-                "rows": cached["rows"][offset:offset + limit],
+                "rows": cached["rows"][offset : offset + limit],
                 "total": cached["total"],
             }
 
@@ -140,7 +140,7 @@ class DataService:
 
         return {
             "columns": cache_data["columns"],
-            "rows": cache_data["rows"][offset:offset + limit],
+            "rows": cache_data["rows"][offset : offset + limit],
             "total": cache_data["total"],
         }
 

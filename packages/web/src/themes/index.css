@@ -4,6 +4,8 @@
    ============================================================================ */
 
 @import './dataflows.css';
+@import './dataflows-inspector.css';
+@import './dataflows-canvas.css';
 
 /* Document-level type knob: this one px value sets the size of everything.
    Each module (sidebar, grid, inspector, …) sets its base font-size in rem

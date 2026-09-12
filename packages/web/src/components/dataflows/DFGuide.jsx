@@ -12,19 +12,19 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'Data Flows is a visual ETL (Extract, Transform, Load) pipeline builder. It lets you move, reshape, and clean data across your local SQLite and SQLCipher databases without writing scripts.',
+        body: 'Data Flows is a visual ETL (Extract, Transform, Load) pipeline builder. It moves, reshapes, cleans, and re-encrypts data across your local SQLite and SQLCipher databases and flat files without writing scripts.',
       },
       {
         type: 'text',
-        body: 'Each pipeline is a directed graph of nodes connected by edges. Data flows from source nodes through transforms and cleaning steps, then lands in sink nodes. You build pipelines by dragging nodes onto a canvas and wiring them together.',
+        body: 'Each pipeline is a directed graph of nodes connected by edges. Rows flow from source nodes through transform and cleaning steps and land in sink nodes. You build pipelines by dragging nodes onto a canvas and wiring their ports together; the pipeline saves itself as you edit.',
       },
       {
         type: 'concepts',
         items: [
-          { icon: 'play-circle', label: 'Pipeline', desc: 'A saved DAG of nodes and edges that moves data from sources to sinks.' },
-          { icon: 'dot', label: 'Node', desc: 'A single operation — reading a table, filtering rows, writing output, etc.' },
-          { icon: 'merge', label: 'Edge', desc: 'A connection between two nodes. Data flows along edges from output ports to input ports.' },
-          { icon: 'database', label: 'Connection', desc: 'A registered database or file that nodes can read from or write to.' },
+          { icon: 'play-circle', label: 'Pipeline', desc: 'A saved graph of nodes and edges, plus its run history and optional schedule.' },
+          { icon: 'dot', label: 'Node', desc: 'A single step: read a table, filter rows, anonymize a column, write a file, and so on. Each node has a Config form and a short editable summary shown on the canvas.' },
+          { icon: 'merge', label: 'Edge', desc: 'A connection from an output port to an input port. Most nodes have one "out" port; Validate rows also has "rejected", and Join has "L" and "R" inputs.' },
+          { icon: 'database', label: 'Connection', desc: 'A database nodes can read or write. Databases open in the app are always available; register more under Connections.' },
         ],
       },
     ],
@@ -36,16 +36,16 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'The home page shows all your saved pipelines as cards. Starred pipelines appear in their own section at the top.',
+        body: 'The home page lists your pipelines as cards with node count, tags, and the status, duration, row count, and time of the last run. Starred pipelines get their own section. The KPI tiles show runs, rows moved, and failures over the last 7 days.',
       },
       {
         type: 'steps',
         items: [
-          { action: 'New pipeline', desc: 'Click the "New pipeline" button in the top-right, or the primary call-to-action card. Give it a name and you\'ll land on a blank canvas.' },
-          { action: 'From a template', desc: 'Click "From a template" to start with a pre-built pipeline pattern like dev-to-prod copy, encryption, or deduplication.' },
-          { action: 'Connections', desc: 'Click "Connections" to register databases and files that your pipelines will read from and write to.' },
-          { action: 'Open a pipeline', desc: 'Click any pipeline card to open it in the canvas editor.' },
-          { action: 'Delete a pipeline', desc: 'Hover over a pipeline card and click the X button to delete it.' },
+          { action: 'New pipeline', desc: 'Click "New pipeline" in the top bar or on the primary card. Enter a name (required), an optional description and comma-separated tags, then press Enter or click Create. You land on an empty canvas.' },
+          { action: 'From a template', desc: 'Click "From a template" (or "From template…" inside the New dialog). Pick a template, adjust the pipeline name, and click Create. A real pipeline is created with the template\'s nodes, edges, and placeholder settings for you to fill in.' },
+          { action: 'Connections', desc: 'Register additional .db or SQLCipher files by name and path so they appear in every database picker.' },
+          { action: 'Open a pipeline', desc: 'Click a card, or focus it and press Enter, to open it in the editor.' },
+          { action: 'Delete a pipeline', desc: 'Click the X on a card. You are asked to confirm; deletion also removes the run history.' },
         ],
       },
     ],
@@ -57,42 +57,40 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'The canvas editor is where you build and run pipelines. It has three panels: the node library on the left, the canvas in the center, and the inspector on the right.',
+        body: 'The editor has three panels: the node library on the left, the canvas in the centre, and the inspector on the right, with a dock along the bottom. The left and right panels collapse into thin rails.',
       },
       {
         type: 'subsection',
         title: 'Adding nodes',
-        body: 'Open the node library on the left (toggle it with the sidebar button). Browse or search for the node type you want, then drag it onto the canvas. The node appears where you drop it.',
+        body: 'Search or browse the node library and drag a node onto the canvas. It is selected immediately so you can configure it in the inspector. Nodes marked "soon" can be placed, but the backend refuses to run them and validation reports an error.',
       },
       {
         type: 'subsection',
         title: 'Wiring nodes',
-        body: 'Each node has input and output ports (the small circles on its left and right edges). Click and drag from an output port to an input port on another node to create an edge. Data will flow along that edge when you run the pipeline.',
+        body: 'Drag from an output port (right side of a node) to an input port (left side) to create an edge. Join has two inputs, L and R; Validate rows has a second output, "rejected". When an edge connects nodes that reference different databases, it shows a cross-database badge.',
       },
       {
         type: 'subsection',
-        title: 'Moving and selecting',
-        body: 'Drag a node\'s header to reposition it. Click a node to select it — the inspector panel on the right will show its configuration. Click the canvas background to deselect.',
-      },
-      {
-        type: 'subsection',
-        title: 'Removing nodes and edges',
-        body: 'Select a node and press Delete or Backspace to remove it (and all its edges). Click on an edge line to remove just that connection.',
+        title: 'Selecting and moving',
+        body: 'Click a node to select it; shift-click or shift-drag a marquee on empty canvas to select several. Drag to move the selection; moves are undoable. Click empty canvas to deselect.',
       },
       {
         type: 'subsection',
         title: 'Pan and zoom',
-        body: 'Scroll to zoom in and out. Click and drag on an empty area of the canvas to pan. The minimap in the bottom-right corner shows your viewport position.',
+        body: 'Plain mouse wheel pans the canvas; hold ctrl or ⌘ while scrolling to zoom around the cursor. Drag empty canvas to pan. The minimap in the corner shows a rectangle for the current viewport; click anywhere on it to jump there.',
       },
       {
         type: 'shortcuts',
         items: [
-          { keys: '⌘ Enter', action: 'Run pipeline' },
-          { keys: '⌘ S', action: 'Force save' },
-          { keys: '⌘ Z', action: 'Undo' },
+          { keys: '⌘ Enter', action: 'Run pipeline in the selected mode' },
+          { keys: '⌘ S', action: 'Save now (pipelines also auto-save)' },
+          { keys: '⌘ Z', action: 'Undo (edits, wiring, moves)' },
           { keys: '⌘ ⇧ Z', action: 'Redo' },
-          { keys: 'Delete', action: 'Remove selected node' },
-          { keys: 'Escape', action: 'Deselect node' },
+          { keys: '⌘ D', action: 'Duplicate the selection' },
+          { keys: 'Delete', action: 'Remove the selected nodes or edge' },
+          { keys: 'Shift + drag', action: 'Marquee select' },
+          { keys: 'Ctrl / ⌘ + wheel', action: 'Zoom' },
+          { keys: 'Escape', action: 'Clear selection' },
         ],
       },
     ],
@@ -104,16 +102,16 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'When you select a node, the inspector panel opens on the right with tabs for different aspects of that node.',
+        body: 'Select a node and the inspector shows tabs for that node. The Issues tab shows a count badge when validation reports problems on the node.',
       },
       {
         type: 'tabs',
         items: [
-          { label: 'Config', desc: 'The main configuration form for the node. Every node type has its own fields — for example, a source table node shows a database picker and table selector; a filter node shows a predicate expression field.' },
-          { label: 'Mapping', desc: 'For nodes that transform columns (like Map Columns), shows a two-pane view linking source columns to target columns with SVG connection lines.' },
-          { label: 'Schema', desc: 'Shows the column schema going in and coming out of the node, highlighting any changes (added, removed, or modified columns).' },
-          { label: 'Preview', desc: 'Executes the pipeline up to this node and shows a sample of the rows it would produce. Use this to verify your transforms are working correctly.' },
-          { label: 'Issues', desc: 'Shows any validation warnings specific to this node, such as missing configuration or type mismatches.' },
+          { label: 'Config', desc: 'An editable summary plus the node\'s settings. Database pickers list open and registered databases; table pickers list existing tables and fall back to a text field when the list cannot be read or you want a new table.' },
+          { label: 'Mapping', desc: 'Only for Map columns and the SQLite table sink. Two panes list upstream columns and target columns; click a source then a target to link them, or edit the from → to rows directly. "Auto-map by name" matches case-insensitively; "Clear all" removes every mapping.' },
+          { label: 'Schema', desc: 'The columns and types inferred for this node\'s output, with added, removed, and type-changed badges against the first upstream node. Inference runs automatically after each save; use "Run schema inference" to trigger it manually.' },
+          { label: 'Preview', desc: 'Runs the pipeline up to this node in preview mode and shows a sample of rows with column types in the header. Nothing is written. Errors are shown inline.' },
+          { label: 'Issues', desc: 'Validation results for this node, each with a level pill (warn or error) and message. Click "Validate pipeline" to re-run validation.' },
         ],
       },
     ],
@@ -125,15 +123,15 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'The dock panel at the bottom of the editor provides pipeline-wide information. Drag its top edge to resize it, or click the minimize button to collapse it.',
+        body: 'The dock provides pipeline-wide views. Drag its top edge to resize it, or collapse it to a bar.',
       },
       {
         type: 'tabs',
         items: [
-          { label: 'Preview', desc: 'Shows a data preview for the selected node — similar to the inspector preview tab but displayed inline below the canvas.' },
-          { label: 'Log', desc: 'The live run log. When you execute a pipeline, events stream here in real time: node start/finish, row counts, errors, and timing.' },
-          { label: 'Issues', desc: 'Pipeline-wide validation. Click "Refresh" to run all validators and see warnings across every node.' },
-          { label: 'History', desc: 'A table of past runs with status, duration, row counts, and timestamps.' },
+          { label: 'Preview', desc: 'Sample rows for the selected node, shown below the canvas.' },
+          { label: 'Log', desc: 'The live run log: status changes, per-node info / warn / error messages, and row counts as they stream in.' },
+          { label: 'Issues', desc: 'Pipeline-wide validation. Click "Validate pipeline" to check every node.' },
+          { label: 'History', desc: 'Past runs with status, mode, duration, total rows, and start time.' },
         ],
       },
     ],
@@ -145,40 +143,45 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'Nodes are grouped into seven families. Each family has a distinct color on the canvas so you can visually identify the role of each step.',
+        body: 'Nodes come in seven families, each with its own colour on the canvas.',
       },
       {
         type: 'family',
         families: [
           {
             name: 'Sources', family: 'source', icon: 'database',
-            desc: 'Read data into the pipeline. Connect to SQLite/SQLCipher tables, views, SQL queries, CSV, JSON, Parquet files, or entire folders.',
+            desc: 'Read rows in: a table or view (with optional WHERE), a SELECT query, CSV, JSON / JSONL, Parquet (optional extra), another SQLite / SQLCipher file by path, or a folder of files matched by glob.',
           },
           {
             name: 'Transform', family: 'transform', icon: 'filter',
-            desc: 'Reshape data: filter rows, select/rename/derive columns, join or union multiple streams, group and aggregate, sort, or limit row counts.',
+            desc: 'Filter, select / drop columns, rename, cast, derive, join (inner / left / right / full on L and R inputs), union, group + aggregate, sort, limit, and bulk column mapping.',
           },
           {
             name: 'Cleaning', family: 'clean', icon: 'dedupe',
-            desc: 'Improve data quality: deduplicate, fill nulls, trim whitespace, normalize case, anonymize PII, or validate rows against rules.',
+            desc: 'Deduplicate, fill nulls, trim, normalize case, anonymize (hash / redact / tokenize / fake with a salt or env:VAR), and validate rows with drop / fail / route behaviour.',
           },
           {
             name: 'Schema ops', family: 'schema', icon: 'columns',
-            desc: 'Modify the target table\'s schema: add, drop, or rename columns, change types, or create indexes.',
+            desc: 'Add, drop, or rename columns, change a column type, or add an index on a table in a connected database. Full runs only; rows pass through.',
           },
           {
             name: 'Code', family: 'code', icon: 'terminal',
-            desc: 'Custom logic via inline SQL, Python, or JavaScript scriptlets for transforms that don\'t fit a built-in node.',
+            desc: 'Inline SQL: a SELECT over _input (and _input2, _input3, … for more inputs). Python and JavaScript scriptlets are listed but not available yet.',
           },
           {
             name: 'Encryption', family: 'encrypt', icon: 'lock',
-            desc: 'Manage database encryption: convert between plaintext SQLite and SQLCipher, or rekey an encrypted database.',
+            desc: 'Encrypt copy writes a SQLCipher copy of a plaintext database; Decrypt copy writes a plaintext copy of an encrypted one; Rekey changes a database\'s passphrase. Full runs only; the source is never modified except by Rekey.',
           },
           {
             name: 'Sinks', family: 'sink', icon: 'table',
-            desc: 'Write data out: insert into SQLite/SQLCipher tables (append, replace, or upsert), or export to CSV, JSON, or Parquet files.',
+            desc: 'Write to a table (append / replace / upsert with key columns and batch size), to a table in another SQLite / SQLCipher file, or to CSV, JSON / JSONL, or Parquet.',
           },
         ],
+      },
+      {
+        type: 'subsection',
+        title: 'Validate rows',
+        body: 'Rules are either a SQL expression that must be true, or a column check: not_null, unique, numeric, non_empty, or regex:<pattern>. On failure, "drop" discards failing rows and marks the run partial, "fail" stops the run at the first bad row, and "route" sends failing rows out of the "rejected" port so you can land them in their own sink.',
       },
     ],
   },
@@ -189,37 +192,34 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'The run bar in the top center of the editor controls execution. Choose a run mode, toggle options, then click Run (or press ⌘ Enter).',
+        body: 'The run bar in the top centre controls execution. Pick a mode, set the options, then click Run or press ⌘ Enter. While a run is active the button becomes Stop, which cancels the run between nodes or between sink batches.',
       },
-      {
-        type: 'subsection',
-        title: 'Run modes',
-        body: null,
-      },
+      { type: 'subsection', title: 'Run modes', body: null },
       {
         type: 'concepts',
         items: [
-          { icon: 'eye', label: 'Preview', desc: 'Executes sources with a small row sample and runs all transforms, but skips sink writes. Use this to verify your pipeline logic without touching any data.' },
-          { icon: 'shield', label: 'Dry run', desc: 'Runs the full pipeline but sinks validate without writing. Confirms that connections work, schemas match, and the pipeline would succeed.' },
-          { icon: 'play', label: 'Full run', desc: 'Executes everything for real. Sources read all rows, transforms process them, and sinks write to their targets.' },
+          { icon: 'eye', label: 'Preview', desc: 'Reads a small sample from each source and runs every transform; sinks, schema ops, and encryption steps only log what they would do.' },
+          { icon: 'shield', label: 'Dry run', desc: 'Runs the full data path but nothing is written. Confirms connections, expressions, and mappings before touching real data.' },
+          { icon: 'play', label: 'Full run', desc: 'Executes everything: sources read all rows, sinks write, schema ops and encryption steps run.' },
+        ],
+      },
+      { type: 'subsection', title: 'Run options', body: null },
+      {
+        type: 'concepts',
+        items: [
+          { icon: 'lock', label: 'Transactional', desc: 'All SQLite table sink writes on a connection happen inside one transaction and are rolled back if the run fails.' },
+          { icon: 'refresh', label: 'Streaming counters', desc: 'Row counters on nodes and edges update live as progress events stream in.' },
         ],
       },
       {
         type: 'subsection',
-        title: 'Run options',
-        body: null,
-      },
-      {
-        type: 'concepts',
-        items: [
-          { icon: 'lock', label: 'Transactional', desc: 'When enabled, all sink writes happen inside a transaction. If any node fails, everything rolls back.' },
-          { icon: 'refresh', label: 'Streaming counters', desc: 'When enabled, node and edge row counters update live on the canvas as the pipeline runs.' },
-        ],
+        title: 'Run status',
+        body: 'A run ends as ok (no warnings), partial (a warning was logged or rows were dropped, for example by Validate rows), failed (an error stopped the run and any transactional writes were rolled back), or cancelled (you pressed Stop). The dock Log shows the events; History keeps the summary.',
       },
       {
         type: 'subsection',
-        title: 'During a run',
-        body: 'The dock\'s Log tab shows events as they stream in. Nodes display live row counters on the canvas, and edges show how many rows have passed through. When the run completes, check the History tab for a summary.',
+        title: 'Scheduling and the CLI',
+        body: 'Use the schedule control in the top bar to attach a 5-field cron expression (minute hour day-of-month month day-of-week) and enable it; the server checks every 30 seconds and runs due pipelines in full mode. You can also run pipelines from a terminal with the sqlcipherui-pipeline command: list, run <id or name> [--mode full|dry|preview], and validate <id or name>.',
       },
     ],
   },
@@ -230,15 +230,16 @@ const SECTIONS = [
     content: [
       {
         type: 'text',
-        body: 'Connections register the databases and files your pipelines work with. Any database you have open in the main application is automatically available. You can also register additional databases through the Connections panel.',
+        body: 'Every database open in the main app is available to nodes automatically. Connections let you register more files so they show up in the database pickers even when they are not open.',
       },
       {
         type: 'steps',
         items: [
           { action: 'Open Connections', desc: 'Click "Connections" in the top bar or on the home page.' },
-          { action: 'Add a connection', desc: 'Click "+ Add connection", give it a name, select its type (SQLite, SQLCipher, CSV folder), and provide the file path.' },
-          { action: 'Use in a node', desc: 'When configuring a source or sink node, the database dropdown shows all connected databases by filename. Hover to see the full path.' },
-          { action: 'Remove a connection', desc: 'Click the delete button next to a connection to unregister it. This does not delete the database file.' },
+          { action: 'Add', desc: 'Click "Add connection", enter a name and the file path, tick "Encrypted" for SQLCipher files, and save.' },
+          { action: 'Edit', desc: 'Click the pencil on a row to change its name, path, or encrypted flag.' },
+          { action: 'Use in a node', desc: 'Database pickers show open and registered databases by filename; hover to see the full path. Table lists are only available for databases that are open; otherwise type the table name.' },
+          { action: 'Remove', desc: 'Click the trash icon and confirm. The database file itself is not deleted.' },
         ],
       },
     ],
@@ -251,15 +252,16 @@ const SECTIONS = [
       {
         type: 'tips',
         items: [
-          'Always run a Preview or Dry run before doing a Full run on important data.',
-          'Use the Preview tab in the inspector to verify each node\'s output as you build.',
-          'Star frequently-used pipelines so they appear at the top of the home page.',
-          'Templates are a great starting point — create a pipeline from a template, then customize it.',
-          'The pipeline auto-saves as you make changes. The dot next to the pipeline name indicates unsaved changes.',
-          'Use Undo (⌘Z) freely — every node add, delete, edge change, and config edit can be reversed.',
-          'For complex transforms, chain multiple simple nodes rather than writing one large SQL query.',
-          'The Validate Rows node can route bad rows to a dead-letter table, keeping your sink data clean.',
-          'When moving data between an encrypted and unencrypted database, the edge will show a cross-database badge.',
+          'Run a Preview or Dry run before a Full run on important data.',
+          'Use the inspector Preview tab to check each node\'s output as you build, and the Schema tab to see how each step changes the columns.',
+          'Star frequently used pipelines so they appear at the top of the home page.',
+          'Templates create real pipelines; fill in the database, table, and path placeholders, then run a Dry run.',
+          'Pipelines auto-save. The dot next to the name means a save is pending; ⌘ S saves immediately.',
+          'Undo (⌘ Z) covers node adds, deletes, moves, wiring, and config edits. ⌘ D duplicates the selection.',
+          'Prefer a chain of small nodes over one large Inline SQL step; each node can be previewed and validated on its own.',
+          'Route rejected rows from Validate rows to their own sink instead of dropping them.',
+          'For anonymization, keep the salt out of the pipeline with env:VAR_NAME so exports stay reproducible but the salt is not saved.',
+          'A cross-database badge on an edge means the two nodes use different databases; Transactional only covers writes within one connection.',
         ],
       },
     ],
@@ -268,11 +270,13 @@ const SECTIONS = [
 
 function GuideNav({ activeId, onSelect }) {
   return (
-    <nav className="df-guide-nav">
+    <nav className="df-guide-nav" aria-label="Guide sections">
       {SECTIONS.map(s => (
         <button
+          type="button"
           key={s.id}
           className={cx('df-guide-nav-item', activeId === s.id && 'is-active')}
+          aria-current={activeId === s.id ? 'page' : undefined}
           onClick={() => onSelect(s.id)}
         >
           <Icon name={s.icon} size={12} />
@@ -379,7 +383,8 @@ function renderBlock(block, i) {
 export function DFGuide() {
   const [activeId, setActiveId] = useState(SECTIONS[0].id);
   const setView = useDataFlowStore((s) => s.setView);
-  const section = SECTIONS.find(s => s.id === activeId);
+  const index = SECTIONS.findIndex(s => s.id === activeId);
+  const section = SECTIONS[index];
 
   return (
     <div className="df-guide">
@@ -394,18 +399,18 @@ export function DFGuide() {
             {section.content.map(renderBlock)}
           </div>
           <div className="df-guide-footer">
-            {activeId !== SECTIONS[0].id && (
-              <button className="btn small" onClick={() => setActiveId(SECTIONS[SECTIONS.findIndex(s => s.id === activeId) - 1].id)}>
+            {index > 0 && (
+              <button type="button" className="btn small" onClick={() => setActiveId(SECTIONS[index - 1].id)}>
                 <Icon name="chevron-left" size={10} /> Previous
               </button>
             )}
             <span style={{ flex: 1 }} />
-            {activeId !== SECTIONS[SECTIONS.length - 1].id ? (
-              <button className="btn small btn-primary" onClick={() => setActiveId(SECTIONS[SECTIONS.findIndex(s => s.id === activeId) + 1].id)}>
+            {index < SECTIONS.length - 1 ? (
+              <button type="button" className="btn small btn-primary" onClick={() => setActiveId(SECTIONS[index + 1].id)}>
                 Next <Icon name="chevron-right" size={10} />
               </button>
             ) : (
-              <button className="btn small btn-primary" onClick={() => setView('home')}>
+              <button type="button" className="btn small btn-primary" onClick={() => setView('home')}>
                 Get started <Icon name="chevron-right" size={10} />
               </button>
             )}

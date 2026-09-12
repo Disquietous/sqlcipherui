@@ -84,7 +84,18 @@ CREATE TABLE IF NOT EXISTS df_run_events (
     message TEXT NOT NULL,
     FOREIGN KEY (run_id) REFERENCES df_runs(id) ON DELETE CASCADE
 );
+
+CREATE INDEX IF NOT EXISTS idx_df_runs_pipeline ON df_runs(pipeline_id);
+CREATE INDEX IF NOT EXISTS idx_df_run_events_run ON df_run_events(run_id);
 """
+
+# Columns added to df_pipelines after the initial release; applied via ALTER TABLE
+# when missing so existing app databases migrate in place.
+_DF_PIPELINE_MIGRATIONS = (
+    ("schedule", "TEXT DEFAULT ''"),
+    ("schedule_enabled", "INTEGER DEFAULT 0"),
+    ("last_scheduled_at", "TEXT"),
+)
 
 
 class AppDatabase:
@@ -110,8 +121,19 @@ class AppDatabase:
         with self._lock:
             conn = self._get_conn()
             conn.executescript(_SCHEMA)
+            self._migrate_df_pipelines(conn)
             conn.commit()
         logger.info("App database initialized at %s", self._path)
+
+    @staticmethod
+    def _migrate_df_pipelines(conn: sqlite3.Connection) -> None:
+        existing = {
+            row["name"] for row in conn.execute("PRAGMA table_info(df_pipelines)").fetchall()
+        }
+        for column, decl in _DF_PIPELINE_MIGRATIONS:
+            if column not in existing:
+                conn.execute(f"ALTER TABLE df_pipelines ADD COLUMN {column} {decl}")
+                logger.info("Migrated df_pipelines: added column %s", column)
 
     def close(self) -> None:
         with self._lock:
@@ -127,20 +149,27 @@ class AppDatabase:
     # History
     # ------------------------------------------------------------------
 
-    def add_history(self, sql_text: str, row_count: int = 0,
-                    elapsed_ms: float = 0, error: str | None = None,
-                    db_path: str | None = None) -> int:
+    def add_history(
+        self,
+        sql_text: str,
+        row_count: int = 0,
+        elapsed_ms: float = 0,
+        error: str | None = None,
+        db_path: str | None = None,
+    ) -> int:
         with self._lock:
             conn = self._get_conn()
             cur = conn.execute(
-                "INSERT INTO history (sql_text, row_count, elapsed_ms, error, db_path) VALUES (?, ?, ?, ?, ?)",
+                "INSERT INTO history (sql_text, row_count, elapsed_ms, error, db_path) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (sql_text, row_count, elapsed_ms, error, db_path),
             )
             conn.commit()
             return cur.lastrowid
 
-    def get_history(self, limit: int = 200, offset: int = 0,
-                    search: str | None = None) -> list[dict]:
+    def get_history(
+        self, limit: int = 200, offset: int = 0, search: str | None = None
+    ) -> list[dict]:
         with self._lock:
             conn = self._get_conn()
             if search:
@@ -188,7 +217,8 @@ class AppDatabase:
         with self._lock:
             conn = self._get_conn()
             conn.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, value),
             )
             conn.commit()
@@ -220,9 +250,13 @@ class AppDatabase:
             rows = conn.execute("SELECT * FROM saved_queries ORDER BY updated_at DESC").fetchall()
             return [dict(r) for r in rows]
 
-    def update_saved_query(self, query_id: int, name: str | None = None,
-                           sql_text: str | None = None,
-                           description: str | None = None) -> bool:
+    def update_saved_query(
+        self,
+        query_id: int,
+        name: str | None = None,
+        sql_text: str | None = None,
+        description: str | None = None,
+    ) -> bool:
         updates = []
         params = []
         if name is not None:
@@ -263,7 +297,8 @@ class AppDatabase:
             conn = self._get_conn()
             conn.execute(
                 "INSERT INTO databases (path, name, last_opened) VALUES (?, ?, datetime('now')) "
-                "ON CONFLICT(path) DO UPDATE SET name = excluded.name, last_opened = datetime('now')",
+                "ON CONFLICT(path) DO UPDATE SET name = excluded.name, "
+                "last_opened = datetime('now')",
                 (path, name),
             )
             conn.commit()
@@ -288,12 +323,14 @@ class AppDatabase:
     # Pipelines
     # ------------------------------------------------------------------
 
-    def save_pipeline(self, name: str, description: str = "",
-                      tags: str = "[]", definition: str = "{}") -> int:
+    def save_pipeline(
+        self, name: str, description: str = "", tags: str = "[]", definition: str = "{}"
+    ) -> int:
         with self._lock:
             conn = self._get_conn()
             cur = conn.execute(
-                "INSERT INTO df_pipelines (name, description, tags, definition) VALUES (?, ?, ?, ?)",
+                "INSERT INTO df_pipelines (name, description, tags, definition) "
+                "VALUES (?, ?, ?, ?)",
                 (name, description, tags, definition),
             )
             conn.commit()
@@ -302,25 +339,32 @@ class AppDatabase:
     def get_pipelines(self) -> list[dict]:
         with self._lock:
             conn = self._get_conn()
-            rows = conn.execute(
-                "SELECT * FROM df_pipelines ORDER BY updated_at DESC"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM df_pipelines ORDER BY updated_at DESC").fetchall()
             return [dict(r) for r in rows]
 
     def get_pipeline(self, pipeline_id: int) -> dict | None:
         with self._lock:
             conn = self._get_conn()
-            row = conn.execute(
-                "SELECT * FROM df_pipelines WHERE id = ?", (pipeline_id,)
-            ).fetchone()
+            row = conn.execute("SELECT * FROM df_pipelines WHERE id = ?", (pipeline_id,)).fetchone()
             return dict(row) if row else None
 
     def update_pipeline(self, pipeline_id: int, **kwargs) -> bool:
-        allowed = {"name", "description", "starred", "tags", "definition"}
+        allowed = {
+            "name",
+            "description",
+            "starred",
+            "tags",
+            "definition",
+            "schedule",
+            "schedule_enabled",
+            "last_scheduled_at",
+        }
         updates = []
         params = []
         for key, value in kwargs.items():
             if key in allowed and value is not None:
+                if key in ("starred", "schedule_enabled"):
+                    value = int(bool(value))
                 updates.append(f"{key} = ?")
                 params.append(value)
         if not updates:
@@ -336,6 +380,26 @@ class AppDatabase:
             conn.commit()
             return cur.rowcount > 0
 
+    def get_scheduled_pipelines(self) -> list[dict]:
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT * FROM df_pipelines WHERE schedule_enabled = 1 AND schedule != '' "
+                "ORDER BY id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_latest_runs(self) -> dict[int, dict]:
+        """Return the most recent run for every pipeline, keyed by pipeline_id."""
+        with self._lock:
+            conn = self._get_conn()
+            rows = conn.execute(
+                "SELECT r.* FROM df_runs r "
+                "JOIN (SELECT pipeline_id, MAX(id) AS max_id FROM df_runs GROUP BY pipeline_id) m "
+                "ON r.id = m.max_id"
+            ).fetchall()
+            return {r["pipeline_id"]: dict(r) for r in rows}
+
     def delete_pipeline(self, pipeline_id: int) -> bool:
         with self._lock:
             conn = self._get_conn()
@@ -347,8 +411,7 @@ class AppDatabase:
     # DataFlow Connections
     # ------------------------------------------------------------------
 
-    def add_df_connection(self, name: str, kind: str, encrypted: bool,
-                          path: str) -> int:
+    def add_df_connection(self, name: str, kind: str, encrypted: bool, path: str) -> int:
         with self._lock:
             conn = self._get_conn()
             cur = conn.execute(
@@ -361,10 +424,36 @@ class AppDatabase:
     def get_df_connections(self) -> list[dict]:
         with self._lock:
             conn = self._get_conn()
-            rows = conn.execute(
-                "SELECT * FROM df_connections ORDER BY name"
-            ).fetchall()
+            rows = conn.execute("SELECT * FROM df_connections ORDER BY name").fetchall()
             return [dict(r) for r in rows]
+
+    def get_df_connection(self, conn_id: int) -> dict | None:
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute("SELECT * FROM df_connections WHERE id = ?", (conn_id,)).fetchone()
+            return dict(row) if row else None
+
+    def update_df_connection(self, conn_id: int, **kwargs) -> bool:
+        allowed = {"name", "kind", "encrypted", "path"}
+        updates = []
+        params = []
+        for key, value in kwargs.items():
+            if key in allowed and value is not None:
+                if key == "encrypted":
+                    value = int(bool(value))
+                updates.append(f"{key} = ?")
+                params.append(value)
+        if not updates:
+            return False
+        params.append(conn_id)
+        with self._lock:
+            conn = self._get_conn()
+            cur = conn.execute(
+                f"UPDATE df_connections SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
+            conn.commit()
+            return cur.rowcount > 0
 
     def delete_df_connection(self, conn_id: int) -> bool:
         with self._lock:
@@ -377,8 +466,9 @@ class AppDatabase:
     # Runs
     # ------------------------------------------------------------------
 
-    def create_run(self, pipeline_id: int, mode: str = "preview",
-                   initiated_by: str = "user") -> int:
+    def create_run(
+        self, pipeline_id: int, mode: str = "preview", initiated_by: str = "user"
+    ) -> int:
         with self._lock:
             conn = self._get_conn()
             cur = conn.execute(
@@ -412,13 +502,48 @@ class AppDatabase:
         with self._lock:
             conn = self._get_conn()
             rows = conn.execute(
-                "SELECT * FROM df_runs WHERE pipeline_id = ? ORDER BY started_at DESC LIMIT ?",
+                "SELECT * FROM df_runs WHERE pipeline_id = ? ORDER BY id DESC LIMIT ?",
                 (pipeline_id, limit),
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def add_run_event(self, run_id: int, level: str, node_id: str | None,
-                      message: str) -> int:
+    def get_run(self, run_id: int) -> dict | None:
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute("SELECT * FROM df_runs WHERE id = ?", (run_id,)).fetchone()
+            return dict(row) if row else None
+
+    def prune_runs(self, pipeline_id: int, keep: int = 200) -> int:
+        """Delete the oldest runs of *pipeline_id* beyond the newest *keep*."""
+        with self._lock:
+            conn = self._get_conn()
+            cur = conn.execute(
+                "DELETE FROM df_runs WHERE pipeline_id = ? AND id NOT IN ("
+                "SELECT id FROM df_runs WHERE pipeline_id = ? ORDER BY id DESC LIMIT ?)",
+                (pipeline_id, pipeline_id, max(int(keep), 0)),
+            )
+            conn.commit()
+            return cur.rowcount
+
+    def get_df_stats(self, days: int = 7) -> dict:
+        """Aggregate full-mode run counts over the trailing *days* window."""
+        with self._lock:
+            conn = self._get_conn()
+            row = conn.execute(
+                "SELECT COUNT(*) AS runs, "
+                "COALESCE(SUM(total_rows), 0) AS rows_moved, "
+                "COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed "
+                "FROM df_runs WHERE mode = 'full' "
+                "AND started_at >= datetime('now', ?)",
+                (f"-{int(days)} days",),
+            ).fetchone()
+            return {
+                "runs": int(row["runs"]),
+                "rows_moved": int(row["rows_moved"]),
+                "failed": int(row["failed"]),
+            }
+
+    def add_run_event(self, run_id: int, level: str, node_id: str | None, message: str) -> int:
         with self._lock:
             conn = self._get_conn()
             cur = conn.execute(

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 _ROW_RETURNING_PREFIXES = ("SELECT", "EXPLAIN", "PRAGMA")
 
 _TABLE_RE = re.compile(
-    r'(?:FROM|JOIN)\s+'
+    r"(?:FROM|JOIN)\s+"
     r'(?:"([^"]+)"|`([^`]+)`|\[([^\]]+)\]|(\w+))',
     re.IGNORECASE,
 )
@@ -56,14 +56,18 @@ class QueryService:
         for m in _TABLE_RE.finditer(sql):
             name = m.group(1) or m.group(2) or m.group(3) or m.group(4)
             if name and name.upper() not in (
-                "SELECT", "WHERE", "ORDER", "GROUP", "HAVING", "LIMIT", "UNION",
+                "SELECT",
+                "WHERE",
+                "ORDER",
+                "GROUP",
+                "HAVING",
+                "LIMIT",
+                "UNION",
             ):
                 tables.append(name)
         return tables
 
-    def _resolve_column_types(
-        self, conn, col_names: list[str], sql: str
-    ) -> list[ColumnMeta]:
+    def _resolve_column_types(self, conn, col_names: list[str], sql: str) -> list[ColumnMeta]:
         """Look up column types from PRAGMA table_info for tables in the query."""
         tables = self._extract_tables(sql)
         # col_name -> type, first match wins (handles ambiguous names reasonably)
@@ -100,20 +104,26 @@ class QueryService:
                 in_single = not in_single
             elif ch == '"' and not in_single:
                 in_double = not in_double
-            elif ch == ';' and not in_single and not in_double:
-                s = ''.join(current).strip()
+            elif ch == ";" and not in_single and not in_double:
+                s = "".join(current).strip()
                 if s:
                     stmts.append(s)
                 current = []
                 i += 1
                 continue
-            elif ch == '-' and not in_single and not in_double and i + 1 < len(sql) and sql[i + 1] == '-':
-                while i < len(sql) and sql[i] != '\n':
+            elif (
+                ch == "-"
+                and not in_single
+                and not in_double
+                and i + 1 < len(sql)
+                and sql[i + 1] == "-"
+            ):
+                while i < len(sql) and sql[i] != "\n":
                     i += 1
                 continue
             current.append(ch)
             i += 1
-        s = ''.join(current).strip()
+        s = "".join(current).strip()
         if s:
             stmts.append(s)
         return stmts

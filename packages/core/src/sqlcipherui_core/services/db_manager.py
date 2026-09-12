@@ -67,7 +67,9 @@ class DatabaseManager:
             db_path.parent.mkdir(parents=True, exist_ok=True)
 
             self._db_path = db_path
-            self._conn = sqlcipher3.connect(str(db_path), check_same_thread=False, isolation_level=None)
+            self._conn = sqlcipher3.connect(
+                str(db_path), check_same_thread=False, isolation_level=None
+            )
 
             if passphrase:
                 self._conn.execute(self._key_pragma("PRAGMA key", passphrase))
@@ -93,7 +95,9 @@ class DatabaseManager:
                 raise FileNotFoundError(f"Database file not found: {db_path}")
 
             self._db_path = db_path
-            self._conn = sqlcipher3.connect(str(db_path), check_same_thread=False, isolation_level=None)
+            self._conn = sqlcipher3.connect(
+                str(db_path), check_same_thread=False, isolation_level=None
+            )
 
             # Test if encrypted by trying to read sqlite_master
             try:
@@ -114,7 +118,7 @@ class DatabaseManager:
         stripped = s.strip()
         if stripped.startswith("x'") and stripped.endswith("'"):
             hex_part = stripped[2:-1]
-            return len(hex_part) == 64 and all(c in '0123456789abcdefABCDEF' for c in hex_part)
+            return len(hex_part) == 64 and all(c in "0123456789abcdefABCDEF" for c in hex_part)
         return False
 
     @staticmethod
@@ -135,7 +139,9 @@ class DatabaseManager:
         with self._lock:
             if self._conn is not None:
                 self._conn.close()
-            self._conn = sqlcipher3.connect(str(self._db_path), check_same_thread=False, isolation_level=None)
+            self._conn = sqlcipher3.connect(
+                str(self._db_path), check_same_thread=False, isolation_level=None
+            )
             conn = self._conn
             conn.execute(self._key_pragma("PRAGMA key", passphrase))
             try:
@@ -167,7 +173,9 @@ class DatabaseManager:
             if not self._is_encrypted or not self._is_unlocked:
                 return False
             try:
-                test_conn = sqlcipher3.connect(str(self._db_path), check_same_thread=False, isolation_level=None)
+                test_conn = sqlcipher3.connect(
+                    str(self._db_path), check_same_thread=False, isolation_level=None
+                )
                 test_conn.execute(self._key_pragma("PRAGMA key", passphrase))
                 test_conn.execute("SELECT count(*) FROM sqlite_master")
                 test_conn.close()
@@ -182,6 +190,7 @@ class DatabaseManager:
     def _encrypt_sync(self, passphrase: str) -> bool:
         import shutil
         import tempfile
+
         with self._lock:
             if self._is_encrypted:
                 raise RuntimeError("Database is already encrypted")
@@ -206,7 +215,9 @@ class DatabaseManager:
                 shutil.copy2(db_str, backup)
                 shutil.move(tmp_path, db_str)
 
-                self._conn = sqlcipher3.connect(db_str, check_same_thread=False, isolation_level=None)
+                self._conn = sqlcipher3.connect(
+                    db_str, check_same_thread=False, isolation_level=None
+                )
                 self._conn.execute(self._key_pragma("PRAGMA key", passphrase))
                 self._conn.execute("SELECT count(*) FROM sqlite_master")
                 self._is_encrypted = True
@@ -235,6 +246,7 @@ class DatabaseManager:
     def _decrypt_sync(self, passphrase: str) -> bool:
         import shutil
         import tempfile
+
         with self._lock:
             if not self._is_encrypted or not self._is_unlocked:
                 raise RuntimeError("Database must be encrypted and unlocked to decrypt")
@@ -258,7 +270,9 @@ class DatabaseManager:
                 shutil.copy2(db_str, backup)
                 shutil.move(tmp_path, db_str)
 
-                self._conn = sqlcipher3.connect(db_str, check_same_thread=False, isolation_level=None)
+                self._conn = sqlcipher3.connect(
+                    db_str, check_same_thread=False, isolation_level=None
+                )
                 self._conn.execute("SELECT count(*) FROM sqlite_master")
                 self._is_encrypted = False
                 self._is_unlocked = True
@@ -270,7 +284,9 @@ class DatabaseManager:
                 return True
             except Exception:
                 if self._conn is None or self._conn is conn:
-                    self._conn = sqlcipher3.connect(db_str, check_same_thread=False, isolation_level=None)
+                    self._conn = sqlcipher3.connect(
+                        db_str, check_same_thread=False, isolation_level=None
+                    )
                     self._conn.execute(self._key_pragma("PRAGMA key", passphrase))
                 try:
                     os.remove(tmp_path)
@@ -347,7 +363,9 @@ class DatabaseManager:
         if table is None:
             self._row_cache.clear()
         else:
-            self._row_cache = {k: v for k, v in self._row_cache.items() if not k.startswith(table + "|")}
+            self._row_cache = {
+                k: v for k, v in self._row_cache.items() if not k.startswith(table + "|")
+            }
 
     async def get_info(self) -> DatabaseInfo:
         return await asyncio.to_thread(self._build_info)

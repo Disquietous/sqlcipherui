@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { Icon } from '../icons/Icon';
 import { useDataFlowStore } from '../../stores/dataflow';
 import { DFDockPreview } from './DFDockPreview';
@@ -7,10 +7,14 @@ import { DFDockIssues } from './DFDockIssues';
 import { DFDockHistory } from './DFDockHistory';
 
 const cx = (...xs) => xs.filter(Boolean).join(' ');
+const COLLAPSED_H = 40;
+const DEFAULT_H = 260;
 
-export function DFDock({ tab, setTab, height, pipeline, selectedNode }) {
+export function DFDock({ tab, setTab, height, selectedNode }) {
   const setDockHeight = useDataFlowStore((s) => s.setDockHeight);
-  const handleRef = useRef(null);
+  const issueCount = useDataFlowStore((s) => s.validationIssues.length);
+  const isRunning = useDataFlowStore((s) => s.isRunning);
+  const collapsed = height <= COLLAPSED_H;
 
   const startResize = useCallback((e) => {
     e.preventDefault();
@@ -25,38 +29,51 @@ export function DFDock({ tab, setTab, height, pipeline, selectedNode }) {
     window.addEventListener('mouseup', up);
   }, [height, setDockHeight]);
 
+  const pick = (id) => {
+    setTab(id);
+    if (collapsed) setDockHeight(DEFAULT_H);
+  };
+
+  const tabs = [
+    { id: 'preview', icon: 'eye', label: 'Preview', meta: selectedNode ? `@ ${selectedNode.id}` : null },
+    { id: 'log', icon: 'terminal', label: 'Run log', live: isRunning },
+    { id: 'issues', icon: 'alert', label: 'Issues', count: issueCount },
+    { id: 'history', icon: 'history', label: 'Run history' },
+  ];
+
   return (
-    <div className="df-dock" style={{ height }}>
-      <div className="df-dock-resize" onMouseDown={startResize}></div>
+    <div className={cx('df-dock', collapsed && 'is-collapsed')} style={{ height }}>
+      <div className="df-dock-resize" onMouseDown={startResize} role="separator" aria-orientation="horizontal" aria-label="Resize dock"></div>
       <div className="df-dock-bar">
-        <div className="df-dock-tabs">
-          <button className={cx('df-dock-tab', tab === 'preview' && 'is-active')} onClick={() => setTab('preview')}>
-            <Icon name="eye" size={11} /><span>Preview</span>
-            {selectedNode && <span className="df-dock-tab-meta">@ {selectedNode.id}</span>}
-          </button>
-          <button className={cx('df-dock-tab', tab === 'log' && 'is-active')} onClick={() => setTab('log')}>
-            <Icon name="terminal" size={11} /><span>Run log</span>
-          </button>
-          <button className={cx('df-dock-tab', tab === 'issues' && 'is-active')} onClick={() => setTab('issues')}>
-            <Icon name="alert" size={11} /><span>Issues</span>
-          </button>
-          <button className={cx('df-dock-tab', tab === 'history' && 'is-active')} onClick={() => setTab('history')}>
-            <Icon name="history" size={11} /><span>Run history</span>
-          </button>
+        <div className="df-dock-tabs" role="tablist">
+          {tabs.map(t => (
+            <button key={t.id} role="tab" aria-selected={tab === t.id}
+                    className={cx('df-dock-tab', tab === t.id && 'is-active')} onClick={() => pick(t.id)}>
+              <Icon name={t.icon} size={11} /><span>{t.label}</span>
+              {t.meta && <span className="df-dock-tab-meta">{t.meta}</span>}
+              {t.count > 0 && <span className="df-dock-tab-count">{t.count}</span>}
+              {t.live && <span className="df-dock-tab-live" aria-label="Run in progress" />}
+            </button>
+          ))}
         </div>
         <div style={{ flex: 1 }}></div>
         <div className="df-dock-actions">
-          <button className="iconbtn-sm" title="Minimize" onClick={() => setDockHeight(height <= 100 ? 260 : 40)}>
-            <Icon name={height <= 100 ? 'chevron-up' : 'chevron-down'} size={11} />
+          <button className="iconbtn-sm"
+                  aria-label={collapsed ? 'Expand dock' : 'Minimize dock'}
+                  title={collapsed ? 'Expand' : 'Minimize'}
+                  onClick={() => setDockHeight(collapsed ? DEFAULT_H : COLLAPSED_H)}>
+            <Icon name={collapsed ? 'chevron-up' : 'chevron-down'} size={11} />
           </button>
         </div>
       </div>
-      <div className="df-dock-body">
-        {tab === 'preview' && <DFDockPreview node={selectedNode} />}
-        {tab === 'log' && <DFDockLog />}
-        {tab === 'issues' && <DFDockIssues />}
-        {tab === 'history' && <DFDockHistory />}
-      </div>
+      {!collapsed && (
+        <div className="df-dock-body" role="tabpanel">
+          {tab === 'preview' && <DFDockPreview node={selectedNode} />}
+          {tab === 'log' && <DFDockLog />}
+          {tab === 'issues' && <DFDockIssues />}
+          {tab === 'history' && <DFDockHistory />}
+        </div>
+      )}
     </div>
   );
 }

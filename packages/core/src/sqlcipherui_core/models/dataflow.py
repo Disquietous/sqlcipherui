@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class RunMode(str, Enum):
+class RunMode(StrEnum):
     preview = "preview"
     dry = "dry"
     full = "full"
 
 
-class RunStatus(str, Enum):
+class RunStatus(StrEnum):
     pending = "pending"
     running = "running"
     ok = "ok"
@@ -42,6 +42,7 @@ class EdgeConfig(BaseModel):
     from_node: str = Field(alias="from")
     to_node: str = Field(alias="to")
     port: str | None = None
+    from_port: str = Field(default="out", alias="fromPort")
     cross_db: bool = Field(default=False, alias="crossDb")
     rows: int = 0
 
@@ -62,6 +63,9 @@ class Pipeline(BaseModel):
     starred: bool = False
     tags: list[str] = Field(default_factory=list)
     definition: PipelineDefinition = Field(default_factory=PipelineDefinition)
+    schedule: str = ""
+    schedule_enabled: bool = False
+    last_scheduled_at: str | None = None
     created_at: str | None = None
     updated_at: str | None = None
 
@@ -79,6 +83,8 @@ class PipelineUpdate(BaseModel):
     starred: bool | None = None
     tags: list[str] | None = None
     definition: PipelineDefinition | None = None
+    schedule: str | None = None
+    schedule_enabled: bool | None = None
 
 
 class RunSummary(BaseModel):
@@ -92,6 +98,18 @@ class RunSummary(BaseModel):
     total_rows: int = 0
     error: str | None = None
     initiated_by: str = "user"
+
+
+class RunResult(BaseModel):
+    """Return value of ``PipelineExecutor.run``."""
+
+    run_id: int
+    status: RunStatus
+    mode: RunMode
+    duration_ms: float = 0
+    total_rows: int = 0
+    error: str | None = None
+    node_rows: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
 class PipelineSummary(BaseModel):
@@ -118,9 +136,16 @@ class DataFlowConnection(BaseModel):
 
 class DataFlowConnectionCreate(BaseModel):
     name: str
-    kind: str
+    kind: str = "sqlite"
     encrypted: bool = False
     path: str
+
+
+class DataFlowConnectionUpdate(BaseModel):
+    name: str | None = None
+    kind: str | None = None
+    encrypted: bool | None = None
+    path: str | None = None
 
 
 class RunEvent(BaseModel):
@@ -139,6 +164,27 @@ class RunRequest(BaseModel):
 
 
 class NodePreviewRequest(BaseModel):
-    pipeline_id: int
+    pipeline_id: int | None = None
     node_id: str
     sample_size: int = 5
+
+
+class SchemaInferRequest(BaseModel):
+    sample_size: int = 20
+
+
+class ColumnInfo(BaseModel):
+    name: str
+    type: str = "TEXT"
+
+
+class NodePreview(BaseModel):
+    columns: list[ColumnInfo] = Field(default_factory=list)
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ValidationIssue(BaseModel):
+    node_id: str | None = None
+    level: str = "warn"
+    message: str

@@ -1,49 +1,56 @@
-import { useState, useEffect } from 'react';
 import { Icon } from '../icons/Icon';
-import { useDataFlowStore } from '../../stores/dataflow';
-import { validatePipeline } from '../../api/dataflow';
 
-export function DFInspectorIssues({ node }) {
-  const pipeline = useDataFlowStore((s) => s.pipeline);
-  const [issues, setIssues] = useState([]);
-  const [loading, setLoading] = useState(false);
+const cx = (...xs) => xs.filter(Boolean).join(' ');
 
-  useEffect(() => {
-    if (!pipeline?.id || !node?.id) return;
-    setLoading(true);
-    validatePipeline(pipeline.id)
-      .then(result => {
-        const all = Array.isArray(result) ? result : result?.issues || [];
-        setIssues(all.filter(i => i.node_id === node.id));
-      })
-      .catch(() => setIssues([]))
-      .finally(() => setLoading(false));
-  }, [pipeline?.id, node?.id]);
+const LEVEL_ICON = { error: 'alert', warn: 'warning-triangle', info: 'info' };
 
-  if (loading) {
-    return <div className="df-empty"><span className="muted">Checking…</span></div>;
-  }
-
-  if (issues.length === 0) {
-    return (
-      <div className="df-empty">
-        <Icon name="check" size={14} /><br />
-        No issues detected on this node.
-      </div>
-    );
-  }
-
+/**
+ * Issues for one node. Validation itself is owned by DFInspector so the tab
+ * count badge stays correct even when this tab is not mounted.
+ */
+export function DFInspectorIssues({ issues, loading, error = null, stale, onRevalidate }) {
   return (
-    <div className="df-issues">
-      {issues.map((issue, i) => (
-        <div key={i} className={`df-issue df-issue-${issue.level || 'warn'}`}>
-          <Icon name={issue.level === 'info' ? 'dot' : 'alert'} size={12} />
-          <div>
-            <b>{issue.message}</b>
-            {issue.detail && <p>{issue.detail}</p>}
-          </div>
+    <div className="df-issues-wrap">
+      <div className="df-insp-preview-bar">
+        {stale
+          ? <span className="pill small" title="Unsaved changes; results reflect the last saved definition">unsaved changes</span>
+          : <span className="pill pill-soft small">{issues.length} issue{issues.length === 1 ? '' : 's'} on this node</span>}
+        <div style={{ flex: 1 }}></div>
+        <button type="button" className="link-btn small" onClick={onRevalidate} disabled={loading}>
+          {loading ? 'Validating…' : 'Validate pipeline'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="df-callout df-callout-err" role="alert">
+          <Icon name="alert" size={13} />
+          <div><b>Validation failed</b><div className="small mono">{error}</div></div>
         </div>
-      ))}
+      )}
+
+      {!error && !loading && issues.length === 0 && (
+        <div className="df-empty">
+          <Icon name="check" size={14} /><br />
+          No issues detected on this node.
+        </div>
+      )}
+
+      {issues.length > 0 && (
+        <div className="df-issues">
+          {issues.map((issue, i) => {
+            const level = issue.level === 'error' ? 'error' : issue.level === 'info' ? 'info' : 'warn';
+            return (
+              <div key={i} className={cx('df-issue', `df-issue-${level}`)}>
+                <Icon name={LEVEL_ICON[level]} size={12} />
+                <div className="df-issue-body">
+                  <span className={cx('df-level-pill', `is-${level}`)}>{level}</span>
+                  <span>{issue.message}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

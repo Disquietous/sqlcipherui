@@ -2,17 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import logging.handlers
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from sqlcipherui_api.config import Settings
-from sqlcipherui_api.dependencies import cleanup_dependencies, get_settings
-from sqlcipherui_api.routers import app_data, cipher, data, database, dataflow, maintenance, query, schema
+from sqlcipherui_api.dependencies import (
+    cleanup_dependencies,
+    get_app_db,
+    get_conn_manager,
+    get_settings,
+)
+from sqlcipherui_api.routers import (
+    app_data,
+    cipher,
+    data,
+    database,
+    dataflow,
+    maintenance,
+    query,
+    schema,
+)
+from sqlcipherui_api.scheduler import scheduler_loop
 
 # Set up file logging to logs/api.log
 _log_dir = Path(__file__).resolve().parent.parent.parent.parent.parent / "logs"
@@ -20,12 +36,16 @@ _log_dir.mkdir(exist_ok=True)
 _log_file = _log_dir / "api.log"
 
 _file_handler = logging.handlers.RotatingFileHandler(
-    _log_file, maxBytes=5_000_000, backupCount=3,
+    _log_file,
+    maxBytes=5_000_000,
+    backupCount=3,
 )
-_file_handler.setFormatter(logging.Formatter(
-    "%(asctime)s %(levelname)-8s %(name)s  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-))
+_file_handler.setFormatter(
+    logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(name)s  %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+)
 
 logging.root.setLevel(logging.DEBUG)
 logging.root.addHandler(_file_handler)
@@ -43,9 +63,19 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info(f"SQLCipherUI API starting on {settings.api_host}:{settings.api_port}")
-    yield
-    await cleanup_dependencies()
-    logger.info("Application shutdown complete")
+    stop_event = asyncio.Event()
+    scheduler_task = asyncio.create_task(
+        scheduler_loop(get_app_db, get_conn_manager, stop_event), name="pipeline-scheduler"
+    )
+    try:
+        yield
+    finally:
+        stop_event.set()
+        scheduler_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await scheduler_task
+        await cleanup_dependencies()
+        logger.info("Application shutdown complete")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -82,6 +112,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # Serve pre-built frontend if available
     import sys
+
     if getattr(sys, "frozen", False):
         web_dist = Path(sys._MEIPASS) / "web_dist"
     else:

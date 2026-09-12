@@ -10,34 +10,53 @@ export const duplicatePipeline = (id, name) =>
 
 export const getDfConnections = () => api.get('/dataflow/connections');
 export const createDfConnection = (data) => api.post('/dataflow/connections', data);
+export const updateDfConnection = (id, data) => api.put(`/dataflow/connections/${id}`, data);
 export const deleteDfConnection = (id) => api.del(`/dataflow/connections/${id}`);
 
 export const getTemplates = () => api.get('/dataflow/templates');
+export const getStats = () => api.get('/dataflow/stats');
 
 export const runPipeline = (id, data) => api.post(`/dataflow/pipelines/${id}/run`, data);
-export const getRuns = (id) => api.get(`/dataflow/pipelines/${id}/runs`);
+export const cancelRun = (runId) => api.post(`/dataflow/runs/${runId}/cancel`);
+export const getRuns = (id, limit = 50) => api.get(`/dataflow/pipelines/${id}/runs?limit=${limit}`);
+export const getRun = (runId) => api.get(`/dataflow/runs/${runId}`);
 export const getRunEvents = (runId) => api.get(`/dataflow/runs/${runId}/events`);
 
 export const previewNode = (pipelineId, nodeId, sampleSize = 5) =>
   api.post(`/dataflow/pipelines/${pipelineId}/preview-node`, {
-    pipeline_id: pipelineId, node_id: nodeId, sample_size: sampleSize
+    node_id: nodeId, sample_size: sampleSize,
   });
+
+export const getSchema = (pipelineId, sampleSize = 20) =>
+  api.post(`/dataflow/pipelines/${pipelineId}/schema`, { sample_size: sampleSize });
 
 export const validatePipeline = (id) => api.post(`/dataflow/pipelines/${id}/validate`);
 
+/**
+ * Start a streaming run. Returns a handle with `abort()`.
+ * `onEvent` receives every server event: status, log, progress, edge_progress, done, error.
+ * `onDone` fires exactly once when the stream closes for any reason.
+ */
 export function streamRun(pipelineId, runRequest, onEvent, onDone) {
   const url = `/api/dataflow/pipelines/${pipelineId}/run-stream`;
-  const body = JSON.stringify(runRequest);
+  const controller = new AbortController();
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    onDone?.();
+  };
 
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body,
+    body: JSON.stringify(runRequest),
+    signal: controller.signal,
   }).then(async (res) => {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       onEvent({ type: 'error', message: err.detail || `HTTP ${res.status}` });
-      onDone?.();
+      finish();
       return;
     }
     const reader = res.body.getReader();
@@ -52,15 +71,16 @@ export function streamRun(pipelineId, runRequest, onEvent, onDone) {
       for (const line of lines) {
         if (line.startsWith('data: ')) {
           try {
-            const event = JSON.parse(line.slice(6));
-            onEvent(event);
+            onEvent(JSON.parse(line.slice(6)));
           } catch { /* skip malformed */ }
         }
       }
     }
-    onDone?.();
+    finish();
   }).catch((err) => {
-    onEvent({ type: 'error', message: err.message });
-    onDone?.();
+    if (err.name !== 'AbortError') onEvent({ type: 'error', message: err.message });
+    finish();
   });
+
+  return { abort: () => controller.abort() };
 }

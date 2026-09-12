@@ -40,17 +40,13 @@ class SchemaService:
             row_count: int | None = None
             column_count: int | None = None
             try:
-                count_rows = await self._db.execute(
-                    f'SELECT count(*) FROM "{name}"'
-                )
+                count_rows = await self._db.execute(f'SELECT count(*) FROM "{name}"')
                 row_count = count_rows[0][0]
             except Exception:
                 logger.warning("Failed to count rows for table %s", name)
 
             try:
-                col_rows = await self._db.execute(
-                    f'PRAGMA table_info("{name}")'
-                )
+                col_rows = await self._db.execute(f'PRAGMA table_info("{name}")')
                 column_count = len(col_rows)
             except Exception:
                 logger.warning("Failed to get column count for table %s", name)
@@ -75,9 +71,7 @@ class SchemaService:
             idx_name = idx_row[1]
             idx_unique = bool(idx_row[2])
             if idx_unique:
-                idx_info_rows = await self._db.execute(
-                    f'PRAGMA index_info("{idx_name}")'
-                )
+                idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
                 if len(idx_info_rows) == 1:
                     unique_columns.add(idx_info_rows[0][2])
 
@@ -99,9 +93,7 @@ class SchemaService:
         for idx_row in idx_list:
             idx_name = idx_row[1]
             idx_unique = bool(idx_row[2])
-            idx_info_rows = await self._db.execute(
-                f'PRAGMA index_info("{idx_name}")'
-            )
+            idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
             idx_columns = [r[2] for r in idx_info_rows]
             sql = index_sql.get(idx_name)
             indexes.append(
@@ -153,9 +145,7 @@ class SchemaService:
         # Row count
         row_count: int | None = None
         try:
-            count_rows = await self._db.execute(
-                f'SELECT count(*) FROM "{name}"'
-            )
+            count_rows = await self._db.execute(f'SELECT count(*) FROM "{name}"')
             row_count = count_rows[0][0]
         except Exception:
             logger.warning("Failed to count rows for table %s", name)
@@ -189,15 +179,11 @@ class SchemaService:
         index_sql = await self._index_sql_map()
         indexes: list[IndexInfo] = []
         for (table_name,) in table_rows:
-            idx_list = await self._db.execute(
-                f'PRAGMA index_list("{table_name}")'
-            )
+            idx_list = await self._db.execute(f'PRAGMA index_list("{table_name}")')
             for idx_row in idx_list:
                 idx_name = idx_row[1]
                 idx_unique = bool(idx_row[2])
-                idx_info_rows = await self._db.execute(
-                    f'PRAGMA index_info("{idx_name}")'
-                )
+                idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
                 idx_columns = [r[2] for r in idx_info_rows]
                 sql = index_sql.get(idx_name)
                 indexes.append(
@@ -227,9 +213,7 @@ class SchemaService:
 
     async def _index_sql_map(self) -> dict[str, str | None]:
         """Map index name -> CREATE INDEX sql (None for auto-indexes)."""
-        rows = await self._db.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type='index'"
-        )
+        rows = await self._db.execute("SELECT name, sql FROM sqlite_master WHERE type='index'")
         return {row[0]: row[1] for row in rows}
 
     async def get_triggers(self) -> list[TriggerInfo]:
@@ -291,9 +275,7 @@ def _build_snapshot_sync(conn) -> SchemaSnapshot:
 
         for obj_type, name, tbl_name, sql in rows:
             if obj_type in ("table", "view"):
-                col_rows = conn.execute(
-                    f"PRAGMA {_q(schema)}.table_xinfo({_q(name)})"
-                ).fetchall()
+                col_rows = conn.execute(f"PRAGMA {_q(schema)}.table_xinfo({_q(name)})").fetchall()
                 columns = [
                     SnapshotColumn(
                         name=r[1],
