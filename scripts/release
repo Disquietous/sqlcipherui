@@ -1,30 +1,43 @@
 #!/usr/bin/env bash
 #
-# Trigger release builds on GitHub Actions and publish as a GitHub Release.
+# Build and publish SQLCipherUI releases via GitHub Actions.
 #
 # Usage:
-#   ./scripts/release                Trigger CI builds
-#   ./scripts/release --publish      Auto-increment patch version and publish
-#   ./scripts/release --publish minor Increment minor version (x.Y.0) and publish
-#   ./scripts/release --publish major Increment major version (X.0.0) and publish
+#   ./scripts/release build                  Trigger CI builds at the committed version
+#   ./scripts/release bump [patch|minor|major]
+#                                            Increment the version, commit, push, and
+#                                            trigger CI builds (default: patch)
+#   ./scripts/release publish                Tag the committed version and publish a
+#                                            GitHub Release from the latest CI build
+#   ./scripts/release publish --force        Re-publish the committed version: move the
+#                                            tag to HEAD and replace the release assets
+#
+# Typical flows:
+#   New version:     bump -> (wait for CI) -> publish
+#   Same version:    build -> (wait for CI) -> publish --force
 #
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CONF="$PROJECT_ROOT/src-tauri/tauri.conf.json"
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
-
-if [ -z "$REPO" ]; then
-    echo "ERROR: Could not determine GitHub repository."
-    echo "Make sure you're in a git repo with a GitHub remote and 'gh' is authenticated."
-    exit 1
-fi
 
 if ! command -v gh &>/dev/null; then
     echo "ERROR: GitHub CLI (gh) is required."
     echo "Install: brew install gh"
     exit 1
 fi
+
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || true)
+if [ -z "$REPO" ]; then
+    echo "ERROR: Could not determine GitHub repository."
+    echo "Make sure you're in a git repo with a GitHub remote and 'gh' is authenticated."
+    exit 1
+fi
+
+usage() {
+    sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
+    exit 1
+}
 
 read_version() {
     grep '"version"' "$CONF" | head -1 | sed 's/.*: *"\(.*\)".*/\1/'
@@ -38,7 +51,8 @@ bump_version() {
     case "$bump" in
         major) major=$((major + 1)); minor=0; patch=0 ;;
         minor) minor=$((minor + 1)); patch=0 ;;
-        *)     patch=$((patch + 1)) ;;
+        patch) patch=$((patch + 1)) ;;
+        *) echo "ERROR: Unknown bump type '$bump' (expected patch, minor, or major)"; exit 1 ;;
     esac
 
     echo "${major}.${minor}.${patch}"
@@ -49,61 +63,134 @@ set_version() {
     sed -i '' "s/\"version\": *\"[^\"]*\"/\"version\": \"${new_version}\"/" "$CONF"
 }
 
-if [ "${1:-}" = "--publish" ]; then
-    BUMP_TYPE="${2:-patch}"
-
-    RUN_ID=$(gh run list --workflow=release.yml --status=success --limit=1 --json databaseId -q '.[0].databaseId')
-    if [ -z "$RUN_ID" ]; then
-        echo "ERROR: No successful build found."
-        echo "Run './scripts/release' first to trigger a build."
+require_clean_tree() {
+    if [ -n "$(git -C "$PROJECT_ROOT" status --porcelain)" ]; then
+        echo "ERROR: Working tree has uncommitted changes. Commit or stash them first."
         exit 1
     fi
+}
 
-    OLD_VERSION=$(read_version)
-    NEW_VERSION=$(bump_version "$OLD_VERSION" "$BUMP_TYPE")
-    TAG="v${NEW_VERSION}"
-
-    if git -C "$PROJECT_ROOT" rev-parse "$TAG" &>/dev/null; then
-        echo "ERROR: Tag ${TAG} already exists. Version ${NEW_VERSION} has already been released."
-        echo "Current version in tauri.conf.json: ${OLD_VERSION}"
+require_pushed() {
+    git -C "$PROJECT_ROOT" fetch -q origin main
+    local local_sha remote_sha
+    local_sha=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+    remote_sha=$(git -C "$PROJECT_ROOT" rev-parse origin/main)
+    if [ "$local_sha" != "$remote_sha" ]; then
+        echo "ERROR: Local main ($local_sha) does not match origin/main ($remote_sha)."
+        echo "CI builds from origin/main. Push (or pull) first."
         exit 1
     fi
+}
 
-    echo "=== Publishing SQLCipherUI ${TAG} ==="
-    echo "  Version bump: ${OLD_VERSION} → ${NEW_VERSION} (${BUMP_TYPE})"
-    echo "  Build run: ${RUN_ID}"
+trigger_build() {
+    local version="$1"
+    echo "Triggering CI builds for v${version} (macOS and Windows)..."
+    gh workflow run release.yml
     echo ""
-
-    set_version "$NEW_VERSION"
-    git -C "$PROJECT_ROOT" add "$CONF"
-    git -C "$PROJECT_ROOT" commit -m "release ${TAG}"
-    git -C "$PROJECT_ROOT" push origin main
-
-    git -C "$PROJECT_ROOT" tag "$TAG"
-    git -C "$PROJECT_ROOT" push origin "$TAG"
-
-    echo ""
-    echo "Tag ${TAG} pushed — publish workflow triggered."
     echo "Monitor progress:"
-    echo "  gh run list --workflow=publish.yml"
-    echo "  gh run watch"
-else
-    VERSION=$(read_version)
-    TAG="v${VERSION}"
-
-    echo "=== SQLCipherUI Release Builder (current: ${TAG}) ==="
-    echo ""
-    echo "Triggering CI builds for macOS and Windows..."
-
-    gh workflow run release.yml --field version="$VERSION"
-
-    echo ""
-    echo "Build triggered. Monitor progress:"
     echo "  gh run list --workflow=release.yml"
     echo "  gh run watch"
     echo ""
-    echo "Once complete, publish a release:"
-    echo "  ./scripts/release --publish          (${VERSION} → $(bump_version "$VERSION" patch))"
-    echo "  ./scripts/release --publish minor    (${VERSION} → $(bump_version "$VERSION" minor))"
-    echo "  ./scripts/release --publish major    (${VERSION} → $(bump_version "$VERSION" major))"
-fi
+    echo "Once complete, publish:"
+    echo "  ./scripts/release publish"
+}
+
+latest_successful_run() {
+    gh run list --workflow=release.yml --status=success --limit=1 \
+        --json databaseId,headSha -q '.[0] | "\(.databaseId) \(.headSha)"'
+}
+
+cmd_build() {
+    require_pushed
+    trigger_build "$(read_version)"
+}
+
+cmd_bump() {
+    local bump_type="${1:-patch}"
+    require_clean_tree
+    require_pushed
+
+    local old_version new_version
+    old_version=$(read_version)
+    new_version=$(bump_version "$old_version" "$bump_type")
+
+    if git -C "$PROJECT_ROOT" rev-parse "v${new_version}" &>/dev/null; then
+        echo "ERROR: Tag v${new_version} already exists."
+        exit 1
+    fi
+
+    echo "=== Bumping version ${old_version} -> ${new_version} (${bump_type}) ==="
+    set_version "$new_version"
+    git -C "$PROJECT_ROOT" add "$CONF"
+    git -C "$PROJECT_ROOT" commit -m "release v${new_version}"
+    git -C "$PROJECT_ROOT" push origin main
+    echo ""
+    trigger_build "$new_version"
+}
+
+cmd_publish() {
+    local force=false
+    [ "${1:-}" = "--force" ] && force=true
+
+    require_clean_tree
+    require_pushed
+
+    local version tag run_info run_id run_sha head_sha
+    version=$(read_version)
+    tag="v${version}"
+    head_sha=$(git -C "$PROJECT_ROOT" rev-parse HEAD)
+
+    run_info=$(latest_successful_run)
+    if [ -z "$run_info" ]; then
+        echo "ERROR: No successful build found."
+        echo "Run './scripts/release build' first."
+        exit 1
+    fi
+    run_id=${run_info% *}
+    run_sha=${run_info#* }
+
+    if [ "$run_sha" != "$head_sha" ]; then
+        echo "ERROR: Latest successful build (run ${run_id}) was made from ${run_sha:0:12},"
+        echo "       but HEAD is ${head_sha:0:12}."
+        echo "Run './scripts/release build' and wait for it to finish, then publish again."
+        exit 1
+    fi
+
+    local tag_exists=false
+    if git -C "$PROJECT_ROOT" ls-remote --exit-code --tags origin "refs/tags/${tag}" &>/dev/null; then
+        tag_exists=true
+    fi
+
+    if $tag_exists && ! $force; then
+        echo "ERROR: Tag ${tag} already exists on origin."
+        echo "  To publish a new version:          ./scripts/release bump [patch|minor|major]"
+        echo "  To replace the ${tag} release assets: ./scripts/release publish --force"
+        exit 1
+    fi
+
+    echo "=== Publishing SQLCipherUI ${tag} ==="
+    echo "  Commit:    ${head_sha:0:12}"
+    echo "  Build run: ${run_id}"
+    if $tag_exists; then
+        echo "  Mode:      re-publish (moving tag, replacing assets)"
+        git -C "$PROJECT_ROOT" tag -f "$tag"
+        git -C "$PROJECT_ROOT" push -f origin "$tag"
+    else
+        echo "  Mode:      new release"
+        git -C "$PROJECT_ROOT" tag "$tag"
+        git -C "$PROJECT_ROOT" push origin "$tag"
+    fi
+
+    echo ""
+    echo "Tag ${tag} pushed. Publish workflow triggered."
+    echo "Monitor progress:"
+    echo "  gh run list --workflow=publish.yml"
+    echo "  gh run watch"
+}
+
+case "${1:-}" in
+    build)   cmd_build ;;
+    bump)    cmd_bump "${2:-patch}" ;;
+    publish) cmd_publish "${2:-}" ;;
+    *)       usage ;;
+esac

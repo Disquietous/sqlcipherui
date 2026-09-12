@@ -2,11 +2,6 @@ name: Release Build
 
 on:
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Version override (leave blank to read from tauri.conf.json)"
-        required: false
-        type: string
 
 jobs:
   build-macos:
