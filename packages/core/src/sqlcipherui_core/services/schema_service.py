@@ -64,6 +64,8 @@ class SchemaService:
         """Return full detail for a single table."""
         # Columns via PRAGMA table_info
         col_rows = await self._db.execute(f'PRAGMA table_info("{name}")')
+        if not col_rows:
+            raise LookupError(f"Table not found: {name}")
         # Determine which columns are marked unique via indexes
         unique_columns: set[str] = set()
         idx_list = await self._db.execute(f'PRAGMA index_list("{name}")')
@@ -72,7 +74,8 @@ class SchemaService:
             idx_unique = bool(idx_row[2])
             if idx_unique:
                 idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
-                if len(idx_info_rows) == 1:
+                # Single-column unique index; expression terms have a NULL name.
+                if len(idx_info_rows) == 1 and idx_info_rows[0][2] is not None:
                     unique_columns.add(idx_info_rows[0][2])
 
         columns = [
@@ -94,8 +97,8 @@ class SchemaService:
             idx_name = idx_row[1]
             idx_unique = bool(idx_row[2])
             idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
-            idx_columns = [r[2] for r in idx_info_rows]
             sql = index_sql.get(idx_name)
+            idx_columns = _index_columns(idx_info_rows, sql)
             indexes.append(
                 IndexInfo(
                     name=idx_name,
@@ -184,8 +187,8 @@ class SchemaService:
                 idx_name = idx_row[1]
                 idx_unique = bool(idx_row[2])
                 idx_info_rows = await self._db.execute(f'PRAGMA index_info("{idx_name}")')
-                idx_columns = [r[2] for r in idx_info_rows]
                 sql = index_sql.get(idx_name)
+                idx_columns = _index_columns(idx_info_rows, sql)
                 indexes.append(
                     IndexInfo(
                         name=idx_name,
@@ -236,6 +239,86 @@ class SchemaService:
 def _q(ident: str) -> str:
     """Double-quote an identifier for use in PRAGMA / FROM clauses."""
     return '"' + ident.replace('"', '""') + '"'
+
+
+_INDEX_ON_RE = re.compile(
+    r"\bON\s+(?:\"(?:[^\"]|\"\")*\"|`(?:[^`]|``)*`|\[[^\]]*\]|\w+)"
+    r"(?:\s*\.\s*(?:\"(?:[^\"]|\"\")*\"|`(?:[^`]|``)*`|\[[^\]]*\]|\w+))?\s*\(",
+    re.IGNORECASE,
+)
+
+
+def _split_top_level(text: str) -> list[str]:
+    """Split on commas that are not nested inside parentheses or quotes."""
+    parts: list[str] = []
+    depth = 0
+    quote: str | None = None
+    start = 0
+    for i, ch in enumerate(text):
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"', "`"):
+            quote = ch
+        elif ch == "[":
+            quote = "]"
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    parts.append(text[start:].strip())
+    return [p for p in parts if p]
+
+
+def _parse_index_terms(sql: str | None) -> list[str] | None:
+    """Extract the indexed terms (columns or expressions) from CREATE INDEX SQL.
+
+    Returns None when the SQL is missing or cannot be parsed.
+    """
+    if not sql:
+        return None
+    m = _INDEX_ON_RE.search(sql)
+    if not m:
+        return None
+    depth = 1
+    quote: str | None = None
+    i = m.end()
+    while i < len(sql):
+        ch = sql[i]
+        if quote:
+            if ch == quote:
+                quote = None
+        elif ch in ("'", '"', "`"):
+            quote = ch
+        elif ch == "[":
+            quote = "]"
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                return _split_top_level(sql[m.end() : i])
+        i += 1
+    return None
+
+
+def _index_columns(index_info_rows: list, sql: str | None) -> list[str]:
+    """Build the column list for an index.
+
+    PRAGMA index_info reports NULL for expression terms, so when any term is an
+    expression the list is recovered from the CREATE INDEX SQL instead. If that
+    fails, expression terms are shown as a placeholder.
+    """
+    names = [r[2] for r in index_info_rows]
+    if all(n is not None for n in names):
+        return names
+    parsed = _parse_index_terms(sql)
+    if parsed is not None and len(parsed) == len(names):
+        return parsed
+    return [n if n is not None else "<expr>" for n in names]
 
 
 _TABLE_OPTIONS_RE = re.compile(

@@ -52,8 +52,12 @@ async def get_table_detail(name: str, cm: ConnManagerDep, db: str = Query(...)) 
     svc = SchemaService(mgr)
     try:
         return await svc.get_table_detail(name)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(status_code=404, detail=f"Table not found: {name}") from e
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load schema for {name}: {e}"
+        ) from e
 
 
 @router.get("/views", response_model=list[ViewInfo])
